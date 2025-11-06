@@ -21,10 +21,25 @@ export async function GET(request: NextRequest) {
         content: true,
         direction: true,
         createdAt: true,
+        subscriber: {
+          select: {
+            id: true,
+          },
+        },
       },
     });
 
-    return NextResponse.json(messages);
+    // Map to include subscriberId for easier access
+    const messagesWithSubscriberId = messages.map(msg => ({
+      id: msg.id,
+      phoneNumber: msg.phoneNumber,
+      content: msg.content,
+      direction: msg.direction,
+      createdAt: msg.createdAt,
+      subscriberId: msg.subscriber?.id || null,
+    }));
+
+    return NextResponse.json(messagesWithSubscriberId);
   } catch (error) {
     console.error('Dashboard messages error:', error);
     return NextResponse.json(

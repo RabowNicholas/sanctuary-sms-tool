@@ -17,6 +17,7 @@ interface Message {
   content: string;
   direction: 'INBOUND' | 'OUTBOUND';
   createdAt: string;
+  subscriberId: string | null;
 }
 
 interface DashboardStats {
@@ -246,11 +247,20 @@ export default function Dashboard() {
                 <p className="text-gray-400 text-center py-8">No messages yet</p>
               ) : (
                 recentMessages.map((message) => (
-                  <div key={message.id} className="border-l-4 border-blue-500 pl-4 bg-gray-700 p-3 rounded-r-lg">
+                  <div key={message.id} className="border-l-4 border-blue-500 pl-4 bg-gray-700 p-3 rounded-r-lg hover:bg-gray-650 transition-colors">
                     <div className="flex items-center justify-between mb-1">
-                      <span className="font-medium text-gray-200">
-                        {formatPhoneNumber(message.phoneNumber)}
-                      </span>
+                      {message.subscriberId ? (
+                        <Link
+                          href={`/dashboard/conversations/${message.subscriberId}`}
+                          className="font-medium text-blue-400 hover:text-blue-300 transition-colors"
+                        >
+                          {formatPhoneNumber(message.phoneNumber)}
+                        </Link>
+                      ) : (
+                        <span className="font-medium text-gray-200">
+                          {formatPhoneNumber(message.phoneNumber)}
+                        </span>
+                      )}
                       <div className="flex items-center space-x-2">
                         <span
                           className={`px-2 py-1 rounded-full text-xs font-medium ${
@@ -266,11 +276,19 @@ export default function Dashboard() {
                         </span>
                       </div>
                     </div>
-                    <p className="text-gray-300 text-sm">
+                    <p className="text-gray-300 text-sm mb-2">
                       {message.content.length > 100
                         ? message.content.substring(0, 100) + '...'
                         : message.content}
                     </p>
+                    {message.subscriberId && (
+                      <Link
+                        href={`/dashboard/conversations/${message.subscriberId}`}
+                        className="text-xs text-blue-400 hover:text-blue-300 transition-colors inline-flex items-center"
+                      >
+                        View Conversation →
+                      </Link>
+                    )}
                   </div>
                 ))
               )}

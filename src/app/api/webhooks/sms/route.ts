@@ -147,6 +147,31 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Send SMS notification to admin for regular messages (not keywords)
+    // Only send if it's a regular message from an active subscriber
+    const isRegularMessage = !result.shouldRespond && result.notifySlack;
+    const adminPhoneNumber = process.env.ADMIN_PHONE_NUMBER;
+    const enableSmsNotifications = process.env.ENABLE_SMS_NOTIFICATIONS !== 'false';
+
+    if (isRegularMessage && adminPhoneNumber && enableSmsNotifications) {
+      try {
+        const subscriber = await subscriberRepo.findByPhoneNumber(payload.From);
+        if (subscriber) {
+          const formattedPhone = subscriber.formattedPhoneNumber;
+          const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
+          const conversationLink = `${baseUrl}/dashboard/conversations/${subscriber.id}`;
+
+          const notificationMessage = `New Sanctuary message from ${formattedPhone}\n${conversationLink}`;
+
+          await twilioService.sendMessage(adminPhoneNumber, notificationMessage);
+          console.log('📲 Admin SMS notification sent to:', adminPhoneNumber);
+        }
+      } catch (error) {
+        console.error('❌ Failed to send admin SMS notification:', error);
+        // Don't fail the webhook for notification errors
+      }
+    }
+
     // Disconnect from database
     await prisma.$disconnect();
 

@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@/generated/prisma';
 
 interface RouteParams {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 export async function GET(
@@ -14,7 +14,7 @@ export async function GET(
   const prisma = new PrismaClient();
 
   try {
-    const subscriberId = params.id;
+    const { id: subscriberId } = await params;
 
     // Find subscriber
     const subscriber = await prisma.subscriber.findUnique({

@@ -1,0 +1,7 @@
+node_modules
+.next
+src/generated
+scripts/legacy-tests
+*.js
+!.eslintrc.js
+!next.config.js

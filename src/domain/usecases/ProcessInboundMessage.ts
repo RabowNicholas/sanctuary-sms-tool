@@ -9,7 +9,7 @@ export interface ProcessInboundMessageResult {
 }
 
 export interface TwilioService {
-  sendMessage(to: string, body: string): Promise<void>;
+  sendMessage(to: string, body: string): Promise<any>;
 }
 
 export interface SlackService {

@@ -4,9 +4,9 @@ import { TwilioSMSService } from '@/infrastructure/sms/TwilioSMSService';
 import { CostCalculator } from '@/infrastructure/cost/CostCalculator';
 
 interface RouteParams {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 interface ReplyRequest {
@@ -20,7 +20,7 @@ export async function POST(
   const prisma = new PrismaClient();
 
   try {
-    const subscriberId = params.id;
+    const { id: subscriberId } = await params;
     const body: ReplyRequest = await request.json();
 
     // Validate request

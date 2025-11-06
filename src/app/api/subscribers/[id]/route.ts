@@ -3,13 +3,13 @@ import { PrismaClient } from '@/generated/prisma';
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const prisma = new PrismaClient();
 
   try {
     const { isActive } = await request.json();
-    const subscriberId = params.id;
+    const { id: subscriberId } = await params;
 
     if (typeof isActive !== 'boolean') {
       return NextResponse.json(
@@ -46,12 +46,12 @@ export async function PATCH(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const prisma = new PrismaClient();
 
   try {
-    const subscriberId = params.id;
+    const { id: subscriberId } = await params;
 
     // Delete subscriber (this will also delete related messages due to foreign key)
     await prisma.subscriber.delete({

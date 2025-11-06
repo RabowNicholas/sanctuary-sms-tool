@@ -82,7 +82,7 @@ export class ProcessInboundMessage {
       const formattedPhone = Subscriber.formatPhoneNumber(phoneNumber);
       return {
         shouldRespond: true,
-        response: "Welcome! You're subscribed. Reply STOP to unsubscribe.",
+        response: "Welcome to SANCTUARY!",
         notifySlack: true,
         slackMessage: `✅ New subscriber: ${formattedPhone} joined the tribe!`,
       };

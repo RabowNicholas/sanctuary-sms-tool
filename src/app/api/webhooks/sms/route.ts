@@ -158,7 +158,13 @@ export async function POST(request: NextRequest) {
         const subscriber = await subscriberRepo.findByPhoneNumber(payload.From);
         if (subscriber) {
           const formattedPhone = subscriber.formattedPhoneNumber;
-          const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
+
+          // Use VERCEL_URL in production, NEXTAUTH_URL as fallback
+          const vercelUrl = process.env.VERCEL_URL;
+          const baseUrl = vercelUrl
+            ? `https://${vercelUrl}`
+            : (process.env.NEXTAUTH_URL || 'http://localhost:3000');
+
           const conversationLink = `${baseUrl}/dashboard/conversations/${subscriber.id}`;
 
           const notificationMessage = `New Sanctuary message from ${formattedPhone}\n${conversationLink}`;

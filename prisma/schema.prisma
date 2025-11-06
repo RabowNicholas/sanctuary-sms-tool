@@ -1,0 +1,48 @@
+// SMS Broadcast System Database Schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Subscriber {
+  id            String    @id @default(cuid())
+  phoneNumber   String    @unique
+  isActive      Boolean   @default(true)
+  joinedAt      DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  slackThreadTs String?   // Slack thread timestamp for grouping
+  messages      Message[]
+
+  @@map("subscribers")
+}
+
+model Message {
+  id          String     @id @default(cuid())
+  phoneNumber String
+  content     String
+  direction   Direction
+  createdAt   DateTime   @default(now())
+  subscriber  Subscriber? @relation(fields: [phoneNumber], references: [phoneNumber])
+
+  @@map("messages")
+}
+
+model AppConfig {
+  id           String @id @default("config")
+  optInKeyword String @default("TRIBE")
+  autoResponse String @default("Welcome! You're subscribed. Reply STOP to unsubscribe.")
+  alreadySubbed String @default("You're already in the tribe!")
+
+  @@map("app_config")
+}
+
+enum Direction {
+  INBOUND
+  OUTBOUND
+}

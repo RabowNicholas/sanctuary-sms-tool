@@ -35,6 +35,7 @@ export default function Dashboard() {
     todayMessages: 0,
   });
   const [recentMessages, setRecentMessages] = useState<Message[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [broadcastMessage, setBroadcastMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -48,9 +49,10 @@ export default function Dashboard() {
 
   const loadDashboardData = async () => {
     try {
-      const [statsResponse, messagesResponse] = await Promise.all([
+      const [statsResponse, messagesResponse, inboxStatsResponse] = await Promise.all([
         fetch('/api/dashboard/stats'),
         fetch('/api/dashboard/messages?limit=10'),
+        fetch('/api/inbox/stats'),
       ]);
 
       if (statsResponse.ok) {
@@ -61,6 +63,11 @@ export default function Dashboard() {
       if (messagesResponse.ok) {
         const messagesData = await messagesResponse.json();
         setRecentMessages(messagesData);
+      }
+
+      if (inboxStatsResponse.ok) {
+        const inboxStatsData = await inboxStatsResponse.json();
+        setUnreadCount(inboxStatsData.unreadCount);
       }
     } catch (err) {
       console.error('Failed to load dashboard data:', err);
@@ -128,17 +135,30 @@ export default function Dashboard() {
               <h1 className="text-3xl font-bold text-white">SMS Broadcast Dashboard</h1>
               <p className="text-gray-300 mt-2">Manage your SMS campaigns and subscribers</p>
             </div>
-            <Link
-              href="/dashboard/subscribers"
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200"
-            >
-              Manage Subscribers
-            </Link>
+            <div className="flex gap-3">
+              <Link
+                href="/dashboard/inbox"
+                className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors duration-200 flex items-center gap-2"
+              >
+                Inbox
+                {unreadCount > 0 && (
+                  <span className="bg-white text-orange-600 text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </Link>
+              <Link
+                href="/dashboard/subscribers"
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200"
+              >
+                Manage Subscribers
+              </Link>
+            </div>
           </div>
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
           <div className="bg-gray-800 p-6 rounded-lg shadow-lg border border-gray-700">
             <h3 className="text-lg font-semibold text-gray-300">Total Subscribers</h3>
             <p className="text-3xl font-bold text-blue-400">{stats.totalSubscribers}</p>
@@ -147,13 +167,19 @@ export default function Dashboard() {
             <h3 className="text-lg font-semibold text-gray-300">Active Subscribers</h3>
             <p className="text-3xl font-bold text-green-400">{stats.activeSubscribers}</p>
           </div>
+          <div className="bg-gray-800 p-6 rounded-lg shadow-lg border border-gray-700 cursor-pointer hover:bg-gray-750 transition-colors">
+            <Link href="/dashboard/inbox?filter=unread">
+              <h3 className="text-lg font-semibold text-gray-300">Unread Messages</h3>
+              <p className="text-3xl font-bold text-orange-400">{unreadCount}</p>
+            </Link>
+          </div>
           <div className="bg-gray-800 p-6 rounded-lg shadow-lg border border-gray-700">
             <h3 className="text-lg font-semibold text-gray-300">Total Messages</h3>
             <p className="text-3xl font-bold text-purple-400">{stats.totalMessages}</p>
           </div>
           <div className="bg-gray-800 p-6 rounded-lg shadow-lg border border-gray-700">
             <h3 className="text-lg font-semibold text-gray-300">Today's Messages</h3>
-            <p className="text-3xl font-bold text-orange-400">{stats.todayMessages}</p>
+            <p className="text-3xl font-bold text-cyan-400">{stats.todayMessages}</p>
           </div>
         </div>
 

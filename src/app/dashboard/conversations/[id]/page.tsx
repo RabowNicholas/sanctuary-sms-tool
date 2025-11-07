@@ -56,10 +56,24 @@ export default function ConversationPage() {
   useEffect(() => {
     fetchConversation();
 
+    // Mark conversation as read when opened
+    markAsRead();
+
     // Poll for new messages every 5 seconds
     const interval = setInterval(fetchConversation, 5000);
     return () => clearInterval(interval);
   }, [subscriberId]);
+
+  const markAsRead = async () => {
+    try {
+      await fetch(`/api/conversations/${subscriberId}/mark-read`, {
+        method: 'POST',
+      });
+    } catch (err) {
+      console.error('Failed to mark as read:', err);
+      // Don't show error to user - this is a background operation
+    }
+  };
 
   const handleSendReply = async (e: React.FormEvent) => {
     e.preventDefault();

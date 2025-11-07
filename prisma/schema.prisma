@@ -17,6 +17,7 @@ model Subscriber {
   joinedAt      DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   slackThreadTs String?   // Slack thread timestamp for grouping
+  lastReadAt    DateTime? // When admin last read this conversation
   messages      Message[]
 
   @@map("subscribers")

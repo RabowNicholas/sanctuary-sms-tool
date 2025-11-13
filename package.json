@@ -14,7 +14,13 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "db:push:prod": "DATABASE_URL=$DATABASE_URL_PROD npx prisma db push",
+    "db:migrate:prod": "DATABASE_URL=$DATABASE_URL_PROD npx prisma migrate dev",
+    "db:studio:prod": "DATABASE_URL=$DATABASE_URL_PROD npx prisma studio",
+    "db:push:test": "npx prisma db push",
+    "db:migrate:test": "npx prisma migrate dev",
+    "db:studio:test": "npx prisma studio"
   },
   "dependencies": {
     "@prisma/client": "^6.16.3",

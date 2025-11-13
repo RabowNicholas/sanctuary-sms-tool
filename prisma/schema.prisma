@@ -11,25 +11,30 @@ datasource db {
 }
 
 model Subscriber {
-  id            String    @id @default(cuid())
-  phoneNumber   String    @unique
-  isActive      Boolean   @default(true)
-  joinedAt      DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  slackThreadTs String?   // Slack thread timestamp for grouping
-  lastReadAt    DateTime? // When admin last read this conversation
+  id            String      @id @default(cuid())
+  phoneNumber   String      @unique
+  isActive      Boolean     @default(true)
+  joinedAt      DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  slackThreadTs String?     // Slack thread timestamp for grouping
+  lastReadAt    DateTime?   // When admin last read this conversation
   messages      Message[]
+  linkClicks    LinkClick[]
 
   @@map("subscribers")
 }
 
 model Message {
-  id          String     @id @default(cuid())
-  phoneNumber String
-  content     String
-  direction   Direction
-  createdAt   DateTime   @default(now())
-  subscriber  Subscriber? @relation(fields: [phoneNumber], references: [phoneNumber])
+  id             String          @id @default(cuid())
+  phoneNumber    String
+  content        String
+  direction      Direction
+  createdAt      DateTime        @default(now())
+  subscriber     Subscriber?     @relation(fields: [phoneNumber], references: [phoneNumber])
+  broadcastId    String?
+  broadcast      Broadcast?      @relation(fields: [broadcastId], references: [id])
+  twilioSid      String?         @unique // Twilio message SID for tracking
+  deliveryStatus DeliveryStatus? @default(SENT)
 
   @@map("messages")
 }
@@ -43,7 +48,50 @@ model AppConfig {
   @@map("app_config")
 }
 
+model Broadcast {
+  id         String    @id @default(cuid())
+  name       String?   // Optional campaign name
+  message    String    // Original message content
+  sentCount  Int       // Number of messages sent
+  totalCost  Float     // Total cost in dollars
+  createdAt  DateTime  @default(now())
+  messages   Message[]
+  links      Link[]
+
+  @@map("broadcasts")
+}
+
+model Link {
+  id          String      @id @default(cuid())
+  broadcastId String
+  broadcast   Broadcast   @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  originalUrl String      // The original URL
+  shortCode   String      @unique // Unique short code (e.g., "abc123")
+  createdAt   DateTime    @default(now())
+  clicks      LinkClick[]
+
+  @@map("links")
+}
+
+model LinkClick {
+  id           String     @id @default(cuid())
+  linkId       String
+  link         Link       @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  subscriberId String?
+  subscriber   Subscriber? @relation(fields: [subscriberId], references: [id])
+  clickedAt    DateTime   @default(now())
+
+  @@map("link_clicks")
+}
+
 enum Direction {
   INBOUND
   OUTBOUND
+}
+
+enum DeliveryStatus {
+  SENT
+  DELIVERED
+  FAILED
+  UNDELIVERED
 }

@@ -27,6 +27,9 @@ export default function Dashboard() {
   });
   const [unreadCount, setUnreadCount] = useState(0);
   const [broadcastMessage, setBroadcastMessage] = useState('');
+  const [campaignName, setCampaignName] = useState('');
+  const [detectedLinks, setDetectedLinks] = useState<string[]>([]);
+  const [approvedLinks, setApprovedLinks] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -36,6 +39,22 @@ export default function Dashboard() {
   useEffect(() => {
     loadDashboardData();
   }, []);
+
+  // Detect links in broadcast message
+  useEffect(() => {
+    const urlPattern = /(https?:\/\/[^\s]+)/g;
+    const matches = broadcastMessage.match(urlPattern);
+    const links = matches ? [...new Set(matches)] : [];
+
+    setDetectedLinks(links);
+
+    // Auto-approve newly detected links
+    setApprovedLinks(prevApproved => {
+      const newApproved = new Set(prevApproved);
+      links.forEach(link => newApproved.add(link));
+      return newApproved;
+    });
+  }, [broadcastMessage]);
 
   const loadDashboardData = async () => {
     try {
@@ -58,10 +77,33 @@ export default function Dashboard() {
     }
   };
 
+  const toggleLinkApproval = (link: string) => {
+    setApprovedLinks(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(link)) {
+        newSet.delete(link);
+      } else {
+        newSet.add(link);
+      }
+      return newSet;
+    });
+  };
+
   const handleSendBroadcast = async () => {
     if (!broadcastMessage.trim()) {
       setError('Please enter a message');
       return;
+    }
+
+    // Check for unapproved links
+    const unapprovedLinks = detectedLinks.filter(link => !approvedLinks.has(link));
+    if (unapprovedLinks.length > 0) {
+      const confirmSend = window.confirm(
+        `⚠️ Warning: ${unapprovedLinks.length} link(s) will not be tracked and will be sent as original URLs.\n\nUnapproved links:\n${unapprovedLinks.join('\n')}\n\nDo you want to send anyway?`
+      );
+      if (!confirmSend) {
+        return;
+      }
     }
 
     setIsLoading(true);
@@ -76,13 +118,18 @@ export default function Dashboard() {
         },
         body: JSON.stringify({
           message: broadcastMessage,
+          campaignName: campaignName.trim() || undefined,
+          approvedLinks: Array.from(approvedLinks),
         }),
       });
 
       if (response.ok) {
         const result = await response.json();
-        setSuccess(`Broadcast sent to ${result.sentTo} subscribers! Cost: $${result.totalCost}`);
+        setSuccess(`Broadcast sent to ${result.sentTo} subscribers! Cost: $${result.totalCost}${result.linksTracked > 0 ? ` (${result.linksTracked} link(s) tracked)` : ''}`);
         setBroadcastMessage('');
+        setCampaignName('');
+        setDetectedLinks([]);
+        setApprovedLinks(new Set());
         loadDashboardData(); // Refresh stats
       } else {
         const errorData = await response.json();
@@ -107,7 +154,40 @@ export default function Dashboard() {
     return new Date(dateStr).toLocaleString();
   };
 
-  const costBreakdown = costCalculator.getCostBreakdown(broadcastMessage, stats.activeSubscribers);
+  // Get base URL for accurate shortened link length
+  const getBaseUrl = () => {
+    if (typeof window !== 'undefined') {
+      return window.location.origin;
+    }
+    return 'https://your-app.vercel.app'; // Fallback for SSR
+  };
+
+  // Calculate what the message will look like after link shortening
+  const getProcessedMessageForCost = () => {
+    if (detectedLinks.length === 0) {
+      return broadcastMessage;
+    }
+
+    let processedMessage = broadcastMessage;
+    const baseUrl = getBaseUrl();
+    // Sample short code is 8 characters (matches actual implementation)
+    const sampleShortCode = 'xxxxxxxx';
+
+    detectedLinks.forEach(link => {
+      // Only replace if link is approved
+      if (approvedLinks.has(link)) {
+        const shortenedUrl = `${baseUrl}/sanctuary/${sampleShortCode}`;
+        processedMessage = processedMessage.replace(link, shortenedUrl);
+      }
+    });
+
+    return processedMessage;
+  };
+
+  const costBreakdown = costCalculator.getCostBreakdown(
+    getProcessedMessageForCost(),
+    stats.activeSubscribers
+  );
 
   return (
     <div className="min-h-screen bg-gray-900 p-6">
@@ -130,6 +210,12 @@ export default function Dashboard() {
                     {unreadCount > 9 ? '9+' : unreadCount}
                   </span>
                 )}
+              </Link>
+              <Link
+                href="/dashboard/analytics"
+                className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors duration-200"
+              >
+                Analytics
               </Link>
               <Link
                 href="/dashboard/subscribers"
@@ -175,6 +261,23 @@ export default function Dashboard() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Campaign Name (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={campaignName}
+                  onChange={(e) => setCampaignName(e.target.value)}
+                  placeholder="e.g., Spring Newsletter, Product Launch..."
+                  className="w-full p-3 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  maxLength={100}
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  Give this broadcast a name to track it in analytics
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
                   Message
                 </label>
                 <textarea
@@ -189,6 +292,40 @@ export default function Dashboard() {
                   <span>{costBreakdown.segmentCount} SMS segment(s)</span>
                 </div>
               </div>
+
+              {/* Detected Links */}
+              {detectedLinks.length > 0 && (
+                <div className="bg-gray-700 p-4 rounded-md border border-gray-600">
+                  <h3 className="font-medium text-gray-200 mb-3 flex items-center gap-2">
+                    🔗 Detected Links ({detectedLinks.length})
+                  </h3>
+                  <div className="space-y-2">
+                    {detectedLinks.map((link, index) => (
+                      <div
+                        key={index}
+                        className="flex items-start gap-3 p-2 bg-gray-800 rounded border border-gray-600"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={approvedLinks.has(link)}
+                          onChange={() => toggleLinkApproval(link)}
+                          className="mt-1 h-4 w-4 rounded border-gray-500 text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-800"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-white break-all">{link}</p>
+                          <p className="text-xs mt-1">
+                            {approvedLinks.has(link) ? (
+                              <span className="text-green-400">✓ Will be shortened & tracked</span>
+                            ) : (
+                              <span className="text-orange-400">⚠️ Will send as-is (no tracking)</span>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Cost Breakdown */}
               <div className="bg-gray-700 p-4 rounded-md border border-gray-600">

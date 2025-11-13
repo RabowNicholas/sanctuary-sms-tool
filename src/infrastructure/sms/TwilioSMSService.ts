@@ -62,10 +62,17 @@ export class TwilioSMSService implements TwilioService {
     }
 
     try {
+      // Get the status callback URL
+      const baseUrl = process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : process.env.NEXTAUTH_URL || 'http://localhost:3000';
+      const statusCallback = `${baseUrl}/api/webhooks/delivery-status`;
+
       const message = await this.twilioClient.messages.create({
         body,
         messagingServiceSid: this.messagingServiceSid,
         to,
+        statusCallback,
       });
 
       return {

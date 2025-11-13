@@ -6,6 +6,7 @@ export interface ProcessInboundMessageResult {
   response?: string;
   notifySlack: boolean;
   slackMessage?: string;
+  isOptIn?: boolean;
 }
 
 export interface TwilioService {
@@ -60,6 +61,7 @@ export class ProcessInboundMessage {
           shouldRespond: true,
           response: "You're already in the tribe!",
           notifySlack: false,
+          isOptIn: true,
         };
       } else {
         // Reactivate deactivated subscriber
@@ -72,6 +74,7 @@ export class ProcessInboundMessage {
           response: "Welcome back! You're subscribed again.",
           notifySlack: true,
           slackMessage: `🔄 Subscriber reactivated: ${formattedPhone} rejoined the tribe!`,
+          isOptIn: true,
         };
       }
     } else {
@@ -85,6 +88,7 @@ export class ProcessInboundMessage {
         response: "Welcome to SANCTUARY!",
         notifySlack: true,
         slackMessage: `✅ New subscriber: ${formattedPhone} joined the tribe!`,
+        isOptIn: true,
       };
     }
   }

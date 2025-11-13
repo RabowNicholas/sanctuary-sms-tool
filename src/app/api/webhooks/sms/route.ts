@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
     if (result.shouldRespond && result.response) {
       try {
         await twilioService.sendMessage(payload.From, result.response);
-        
+
         // Store the outbound message
         try {
           await prisma.message.create({
@@ -115,8 +115,24 @@ export async function POST(request: NextRequest) {
         } catch (error) {
           console.error('❌ Failed to store outbound message:', error);
         }
-        
+
         console.log('📤 SMS response sent');
+
+        // Mark TRIBE opt-in messages as read after response is sent
+        if (result.isOptIn) {
+          try {
+            const subscriber = await subscriberRepo.findByPhoneNumber(payload.From);
+            if (subscriber) {
+              await prisma.subscriber.update({
+                where: { id: subscriber.id },
+                data: { lastReadAt: new Date() }
+              });
+              console.log('✅ TRIBE opt-in conversation marked as read');
+            }
+          } catch (error) {
+            console.error('❌ Failed to mark TRIBE conversation as read:', error);
+          }
+        }
       } catch (error) {
         console.error('❌ Failed to send SMS response:', error);
         // Don't fail the webhook for SMS sending errors

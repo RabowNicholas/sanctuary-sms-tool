@@ -29,7 +29,7 @@ type FilterType = 'all' | 'unread' | 'read';
 export default function InboxPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [stats, setStats] = useState<InboxStats>({ unreadCount: 0, totalConversations: 0 });
-  const [filter, setFilter] = useState<FilterType>('all');
+  const [filter, setFilter] = useState<FilterType>('unread');
   const [search, setSearch] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');

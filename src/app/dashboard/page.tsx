@@ -11,15 +11,6 @@ interface Subscriber {
   joinedAt: string;
 }
 
-interface Message {
-  id: string;
-  phoneNumber: string;
-  content: string;
-  direction: 'INBOUND' | 'OUTBOUND';
-  createdAt: string;
-  subscriberId: string | null;
-}
-
 interface DashboardStats {
   totalSubscribers: number;
   activeSubscribers: number;
@@ -34,7 +25,6 @@ export default function Dashboard() {
     totalMessages: 0,
     todayMessages: 0,
   });
-  const [recentMessages, setRecentMessages] = useState<Message[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [broadcastMessage, setBroadcastMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -49,20 +39,14 @@ export default function Dashboard() {
 
   const loadDashboardData = async () => {
     try {
-      const [statsResponse, messagesResponse, inboxStatsResponse] = await Promise.all([
+      const [statsResponse, inboxStatsResponse] = await Promise.all([
         fetch('/api/dashboard/stats'),
-        fetch('/api/dashboard/messages?limit=10'),
         fetch('/api/inbox/stats'),
       ]);
 
       if (statsResponse.ok) {
         const statsData = await statsResponse.json();
         setStats(statsData);
-      }
-
-      if (messagesResponse.ok) {
-        const messagesData = await messagesResponse.json();
-        setRecentMessages(messagesData);
       }
 
       if (inboxStatsResponse.ok) {
@@ -183,9 +167,8 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Main Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Broadcast Composer */}
+        {/* Broadcast Composer */}
+        <div className="max-w-2xl mx-auto">
           <div className="bg-gray-800 p-6 rounded-lg shadow-lg border border-gray-700">
             <h2 className="text-xl font-semibold text-white mb-4">Send Broadcast</h2>
             
@@ -253,71 +236,6 @@ export default function Dashboard() {
               >
                 {isLoading ? 'Sending...' : `Send to ${stats.activeSubscribers} Subscribers`}
               </button>
-            </div>
-          </div>
-
-          {/* Recent Messages */}
-          <div className="bg-gray-800 p-6 rounded-lg shadow-lg border border-gray-700">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold text-white">Recent Messages</h2>
-              <button
-                onClick={loadDashboardData}
-                className="text-blue-400 hover:text-blue-300 text-sm font-medium transition-colors duration-200"
-              >
-                Refresh
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              {recentMessages.length === 0 ? (
-                <p className="text-gray-400 text-center py-8">No messages yet</p>
-              ) : (
-                recentMessages.map((message) => (
-                  <div key={message.id} className="border-l-4 border-blue-500 pl-4 bg-gray-700 p-3 rounded-r-lg hover:bg-gray-650 transition-colors">
-                    <div className="flex items-center justify-between mb-1">
-                      {message.subscriberId ? (
-                        <Link
-                          href={`/dashboard/conversations/${message.subscriberId}`}
-                          className="font-medium text-blue-400 hover:text-blue-300 transition-colors"
-                        >
-                          {formatPhoneNumber(message.phoneNumber)}
-                        </Link>
-                      ) : (
-                        <span className="font-medium text-gray-200">
-                          {formatPhoneNumber(message.phoneNumber)}
-                        </span>
-                      )}
-                      <div className="flex items-center space-x-2">
-                        <span
-                          className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            message.direction === 'INBOUND'
-                              ? 'bg-blue-600 text-blue-100'
-                              : 'bg-green-600 text-green-100'
-                          }`}
-                        >
-                          {message.direction === 'INBOUND' ? 'Received' : 'Sent'}
-                        </span>
-                        <span className="text-xs text-gray-400">
-                          {formatDate(message.createdAt)}
-                        </span>
-                      </div>
-                    </div>
-                    <p className="text-gray-300 text-sm mb-2">
-                      {message.content.length > 100
-                        ? message.content.substring(0, 100) + '...'
-                        : message.content}
-                    </p>
-                    {message.subscriberId && (
-                      <Link
-                        href={`/dashboard/conversations/${message.subscriberId}`}
-                        className="text-xs text-blue-400 hover:text-blue-300 transition-colors inline-flex items-center"
-                      >
-                        View Conversation →
-                      </Link>
-                    )}
-                  </div>
-                ))
-              )}
             </div>
           </div>
         </div>

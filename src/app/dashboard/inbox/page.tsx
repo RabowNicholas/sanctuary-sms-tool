@@ -33,6 +33,7 @@ export default function InboxPage() {
   const [search, setSearch] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [isMarkingAllRead, setIsMarkingAllRead] = useState(false);
 
   useEffect(() => {
     loadInbox();
@@ -107,6 +108,33 @@ export default function InboxPage() {
       }
     } catch (err) {
       console.error('Failed to mark as unread:', err);
+    }
+  };
+
+  const handleMarkAllAsRead = async () => {
+    // Confirm before marking all as read
+    if (!confirm(`Mark all ${stats.unreadCount} conversation${stats.unreadCount === 1 ? '' : 's'} as read?`)) {
+      return;
+    }
+
+    setIsMarkingAllRead(true);
+    try {
+      const response = await fetch('/api/inbox/mark-all-read', {
+        method: 'POST',
+      });
+
+      if (response.ok) {
+        // Refresh inbox and stats
+        await loadInbox();
+        await loadStats();
+      } else {
+        setError('Failed to mark all as read');
+      }
+    } catch (err) {
+      console.error('Failed to mark all as read:', err);
+      setError('Failed to mark all as read');
+    } finally {
+      setIsMarkingAllRead(false);
     }
   };
 
@@ -210,6 +238,17 @@ export default function InboxPage() {
                 className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
+
+            {/* Mark All as Read Button */}
+            {stats.unreadCount > 0 && (
+              <button
+                onClick={handleMarkAllAsRead}
+                disabled={isMarkingAllRead}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors duration-200 font-medium disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+              >
+                {isMarkingAllRead ? 'Marking...' : 'Mark All as Read'}
+              </button>
+            )}
           </div>
         </div>
 

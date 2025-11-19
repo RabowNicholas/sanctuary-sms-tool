@@ -336,18 +336,22 @@ export default function Dashboard() {
                     <span className="ml-2 font-medium text-white">{stats.activeSubscribers}</span>
                   </div>
                   <div>
-                    <span className="text-gray-400">Cost per SMS:</span>
-                    <span className="ml-2 font-medium text-white">${costBreakdown.costPerSubscriber.toFixed(4)}</span>
+                    <span className="text-gray-400">Segments:</span>
+                    <span className="ml-2 font-medium text-white">{costBreakdown.segmentCount}</span>
                   </div>
                   <div>
+                    <span className="text-gray-400">Base SMS Cost:</span>
+                    <span className="ml-2 font-medium text-white">${costBreakdown.baseCost.toFixed(2)}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400">Carrier Fees:</span>
+                    <span className="ml-2 font-medium text-white">${costBreakdown.carrierFees.toFixed(2)}</span>
+                  </div>
+                  <div className="col-span-2 pt-2 border-t border-gray-600">
                     <span className="text-gray-400">Total Cost:</span>
                     <span className="ml-2 font-medium text-lg text-green-400">
                       ${costBreakdown.totalCost.toFixed(2)}
                     </span>
-                  </div>
-                  <div>
-                    <span className="text-gray-400">Segments:</span>
-                    <span className="ml-2 font-medium text-white">{costBreakdown.segmentCount}</span>
                   </div>
                 </div>
               </div>

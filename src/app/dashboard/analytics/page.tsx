@@ -116,7 +116,7 @@ export default function AnalyticsPage() {
                     </div>
                     <div className="text-right">
                       <p className="text-2xl font-bold text-green-400">${broadcast.totalCost.toFixed(2)}</p>
-                      <p className="text-gray-400 text-sm">Total Cost</p>
+                      <p className="text-gray-400 text-sm">Total Cost (incl. carrier fees)</p>
                     </div>
                   </div>
                   <div className="mt-3 p-3 bg-gray-700 rounded border border-gray-600">

@@ -119,12 +119,4 @@ export class TwilioSMSService implements TwilioService {
       throw new Error(`Failed to get message status: ${error.message}`);
     }
   }
-
-  calculateCost(messageBody: string): number {
-    const segmentLength = 160;
-    const costPerSegment = 0.0083; // Twilio US SMS cost
-    
-    const segments = messageBody.length === 0 ? 1 : Math.ceil(messageBody.length / segmentLength);
-    return segments * costPerSegment;
-  }
 }

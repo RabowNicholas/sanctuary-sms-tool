@@ -10,6 +10,8 @@ export interface CostBreakdown {
   segmentCount: number;
   subscriberCount: number;
   costPerSegment: number;
+  baseCost: number;
+  carrierFees: number;
   totalCost: number;
   costPerSubscriber: number;
 }
@@ -21,7 +23,9 @@ export interface GrowthEstimate {
 }
 
 export class CostCalculator {
-  private readonly SMS_COST_PER_SEGMENT = 0.0083; // Twilio US SMS cost
+  private readonly SMS_BASE_COST_PER_SEGMENT = 0.0083; // Twilio US SMS base cost
+  private readonly SMS_CARRIER_FEE_PER_SEGMENT = 0.00334; // Carrier fees per segment
+  private readonly SMS_TOTAL_COST_PER_SEGMENT = 0.01164; // Total cost (base + carrier)
   private readonly SMS_SEGMENT_LENGTH = 160; // Standard SMS segment length
 
   calculateSegments(message: string): number {
@@ -31,16 +35,16 @@ export class CostCalculator {
 
   calculateBroadcastCost(message: string, subscriberCount: number): number {
     if (subscriberCount === 0) return 0;
-    
+
     const segments = this.calculateSegments(message);
-    const totalCost = segments * subscriberCount * this.SMS_COST_PER_SEGMENT;
-    
+    const totalCost = segments * subscriberCount * this.SMS_TOTAL_COST_PER_SEGMENT;
+
     return Math.round(totalCost * 100) / 100; // Round to 2 decimal places
   }
 
   getSMSPricing(): SMSPricing {
     return {
-      costPerSegment: this.SMS_COST_PER_SEGMENT,
+      costPerSegment: this.SMS_TOTAL_COST_PER_SEGMENT,
       segmentLength: this.SMS_SEGMENT_LENGTH,
       currency: 'USD',
     };
@@ -52,18 +56,23 @@ export class CostCalculator {
     broadcastsPerMonth: number
   ): number {
     const segments = Math.ceil(messageLength / this.SMS_SEGMENT_LENGTH);
-    const costPerBroadcast = segments * subscriberCount * this.SMS_COST_PER_SEGMENT;
+    const costPerBroadcast = segments * subscriberCount * this.SMS_TOTAL_COST_PER_SEGMENT;
     const monthlyCost = costPerBroadcast * broadcastsPerMonth;
-    
+
     return Math.round(monthlyCost * 100) / 100;
   }
 
   getCostBreakdown(message: string, subscriberCount: number): CostBreakdown {
     const characterCount = message.length;
     const segmentCount = this.calculateSegments(message);
-    const totalCost = this.calculateBroadcastCost(message, subscriberCount);
-    const costPerSubscriber = subscriberCount > 0 
-      ? Math.round((segmentCount * this.SMS_COST_PER_SEGMENT) * 10000) / 10000 // More precision for rounding
+    const totalSegments = segmentCount * subscriberCount;
+
+    const baseCost = Math.round(totalSegments * this.SMS_BASE_COST_PER_SEGMENT * 100) / 100;
+    const carrierFees = Math.round(totalSegments * this.SMS_CARRIER_FEE_PER_SEGMENT * 100) / 100;
+    const totalCost = Math.round((baseCost + carrierFees) * 100) / 100;
+
+    const costPerSubscriber = subscriberCount > 0
+      ? Math.round((segmentCount * this.SMS_TOTAL_COST_PER_SEGMENT) * 10000) / 10000
       : 0;
 
     return {
@@ -71,7 +80,9 @@ export class CostCalculator {
       characterCount,
       segmentCount,
       subscriberCount,
-      costPerSegment: this.SMS_COST_PER_SEGMENT,
+      costPerSegment: this.SMS_TOTAL_COST_PER_SEGMENT,
+      baseCost,
+      carrierFees,
       totalCost,
       costPerSubscriber,
     };

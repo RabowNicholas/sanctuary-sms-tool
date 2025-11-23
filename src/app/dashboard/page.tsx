@@ -313,13 +313,16 @@ export default function Dashboard() {
                         />
                         <div className="flex-1 min-w-0">
                           <p className="text-sm text-white break-all">{link}</p>
-                          <p className="text-xs mt-1">
-                            {approvedLinks.has(link) ? (
-                              <span className="text-green-400">✓ Will be shortened & tracked</span>
-                            ) : (
-                              <span className="text-orange-400">⚠️ Will send as-is (no tracking)</span>
-                            )}
-                          </p>
+                          {approvedLinks.has(link) ? (
+                            <div className="mt-1 space-y-1">
+                              <p className="text-xs text-green-400">✓ Will be shortened & tracked</p>
+                              <p className="text-xs text-gray-400">
+                                Preview: <span className="text-blue-300">{getBaseUrl()}/sanctuary/xxxxxxxx</span>
+                              </p>
+                            </div>
+                          ) : (
+                            <p className="text-xs mt-1 text-orange-400">⚠️ Will send as-is (no tracking)</p>
+                          )}
                         </div>
                       </div>
                     ))}

@@ -24,7 +24,8 @@ export class ProcessInboundMessage {
   constructor(
     private subscriberRepository: SubscriberRepository,
     private twilioService: TwilioService,
-    private slackService: SlackService
+    private slackService: SlackService,
+    private welcomeMessage: string = "Welcome to SANCTUARY!"
   ) {}
 
   async execute(phoneNumber: string, message: string): Promise<ProcessInboundMessageResult> {
@@ -85,7 +86,7 @@ export class ProcessInboundMessage {
       const formattedPhone = Subscriber.formatPhoneNumber(phoneNumber);
       return {
         shouldRespond: true,
-        response: "Welcome to SANCTUARY!",
+        response: this.welcomeMessage,
         notifySlack: true,
         slackMessage: `✅ New subscriber: ${formattedPhone} joined the tribe!`,
         isOptIn: true,

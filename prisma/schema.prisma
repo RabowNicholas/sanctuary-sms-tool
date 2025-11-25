@@ -40,10 +40,11 @@ model Message {
 }
 
 model AppConfig {
-  id           String @id @default("config")
-  optInKeyword String @default("TRIBE")
-  autoResponse String @default("Welcome! You're subscribed. Reply STOP to unsubscribe.")
-  alreadySubbed String @default("You're already in the tribe!")
+  id             String @id @default("config")
+  optInKeyword   String @default("TRIBE")
+  autoResponse   String @default("Welcome! You're subscribed. Reply STOP to unsubscribe.")
+  alreadySubbed  String @default("You're already in the tribe!")
+  welcomeMessage String @default("Welcome to SANCTUARY!")
 
   @@map("app_config")
 }

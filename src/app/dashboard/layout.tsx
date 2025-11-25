@@ -87,6 +87,16 @@ export default function DashboardLayout({
               >
                 Subscribers
               </Link>
+              <Link
+                href="/dashboard/settings"
+                className={`text-sm font-medium transition-colors duration-200 ${
+                  isActive('/dashboard/settings')
+                    ? 'text-white'
+                    : 'text-gray-300 hover:text-white'
+                }`}
+              >
+                Settings
+              </Link>
             </nav>
 
             {/* Sign Out Button */}

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@/generated/prisma';
 import { PrismaSubscriberRepository } from '@/infrastructure/database/repositories/PrismaSubscriberRepository';
+import { PrismaAppConfigRepository } from '@/infrastructure/database/repositories/PrismaAppConfigRepository';
 import { TwilioSMSService } from '@/infrastructure/sms/TwilioSMSService';
 import { ProcessInboundMessage } from '@/domain/usecases/ProcessInboundMessage';
 
@@ -51,13 +52,14 @@ export async function POST(request: NextRequest) {
     // Initialize services
     const prisma = new PrismaClient();
     const subscriberRepo = new PrismaSubscriberRepository(prisma);
-    
+    const configRepo = new PrismaAppConfigRepository(prisma);
+
     const twilioConfig = {
       accountSid: process.env.TWILIO_ACCOUNT_SID || 'ACtest123',
       authToken: process.env.TWILIO_AUTH_TOKEN || 'test_token',
       messagingServiceSid: process.env.TWILIO_MESSAGING_SERVICE_SID || 'MGtest123',
     };
-    
+
     const twilioService = new TwilioSMSService(twilioConfig);
 
     // Initialize Slack service
@@ -67,10 +69,14 @@ export async function POST(request: NextRequest) {
     };
     const slackService = new SlackNotificationService(slackConfig);
 
+    // Fetch welcome message from config
+    const welcomeMessage = await configRepo.getWelcomeMessage();
+
     const messageProcessor = new ProcessInboundMessage(
       subscriberRepo,
       twilioService,
-      slackService
+      slackService,
+      welcomeMessage
     );
 
     // Process the inbound message

@@ -203,10 +203,8 @@ export async function POST(request: NextRequest) {
     // Disconnect from database
     await prisma.$disconnect();
 
-    // Return TwiML response (required by Twilio)
-    const twimlResponse = result.shouldRespond && result.response 
-      ? `<?xml version="1.0" encoding="UTF-8"?><Response><Message>${result.response}</Message></Response>`
-      : `<?xml version="1.0" encoding="UTF-8"?><Response></Response>`;
+    // Return empty TwiML response (we handle all messaging via API)
+    const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?><Response></Response>`;
 
     return new NextResponse(twimlResponse, {
       headers: {

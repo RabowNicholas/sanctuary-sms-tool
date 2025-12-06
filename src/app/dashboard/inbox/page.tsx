@@ -34,19 +34,27 @@ export default function InboxPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [isMarkingAllRead, setIsMarkingAllRead] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [page, setPage] = useState(0);
+  const ITEMS_PER_PAGE = 50;
 
   useEffect(() => {
     loadInbox();
     loadStats();
   }, [filter, search]);
 
-  const loadInbox = async () => {
-    setIsLoading(true);
+  const loadInbox = async (loadMore = false) => {
+    if (!loadMore) {
+      setIsLoading(true);
+    }
     setError('');
 
     try {
+      const currentPage = loadMore ? page + 1 : 0;
       const params = new URLSearchParams();
       params.set('filter', filter);
+      params.set('limit', ITEMS_PER_PAGE.toString());
+      params.set('offset', (currentPage * ITEMS_PER_PAGE).toString());
       if (search) {
         params.set('search', search);
       }
@@ -55,7 +63,16 @@ export default function InboxPage() {
 
       if (response.ok) {
         const data = await response.json();
-        setConversations(data.conversations);
+
+        if (loadMore) {
+          setConversations(prev => [...prev, ...data.conversations]);
+          setPage(currentPage);
+        } else {
+          setConversations(data.conversations);
+          setPage(0);
+        }
+
+        setHasMore(data.pagination.hasMore);
       } else {
         setError('Failed to load conversations');
       }
@@ -76,6 +93,15 @@ export default function InboxPage() {
       }
     } catch (err) {
       console.error('Failed to load stats:', err);
+    }
+  };
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.currentTarget;
+    const scrolledToBottom = target.scrollHeight - target.scrollTop <= target.clientHeight + 100;
+
+    if (scrolledToBottom && !isLoading && hasMore) {
+      loadInbox(true);
     }
   };
 
@@ -253,7 +279,10 @@ export default function InboxPage() {
         </div>
 
         {/* Conversations List */}
-        <div className="bg-gray-800 rounded-lg shadow-lg border border-gray-700">
+        <div
+          className="bg-gray-800 rounded-lg shadow-lg border border-gray-700 max-h-[calc(100vh-450px)] overflow-y-auto"
+          onScroll={handleScroll}
+        >
           {error && (
             <div className="p-4 bg-red-900 border-b border-red-700 text-red-300">
               {error}
@@ -355,6 +384,21 @@ export default function InboxPage() {
                   </div>
                 </div>
               ))}
+
+              {/* Show loading indicator when loading more */}
+              {isLoading && conversations.length > 0 && (
+                <div className="p-4 text-center text-gray-400 border-t border-gray-700">
+                  <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+                  <p className="mt-2 text-sm">Loading more...</p>
+                </div>
+              )}
+
+              {/* Show "no more" message when at end */}
+              {!hasMore && conversations.length > 0 && (
+                <div className="p-4 text-center text-gray-400 text-sm border-t border-gray-700">
+                  No more conversations
+                </div>
+              )}
             </div>
           )}
         </div>

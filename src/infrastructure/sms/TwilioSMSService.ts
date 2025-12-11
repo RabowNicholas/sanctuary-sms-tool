@@ -62,18 +62,30 @@ export class TwilioSMSService implements TwilioService {
     }
 
     try {
-      // Get the status callback URL
-      const baseUrl = process.env.VERCEL_URL
+      // Get the status callback URL only if not running locally
+      let baseUrl = process.env.VERCEL_URL
         ? `https://${process.env.VERCEL_URL}`
-        : process.env.NEXTAUTH_URL || 'http://localhost:3000';
-      const statusCallback = `${baseUrl}/api/webhooks/delivery-status`;
+        : process.env.NEXTAUTH_URL;
 
-      const message = await this.twilioClient.messages.create({
+      // Check if baseUrl is localhost - if so, treat it as if not set
+      if (baseUrl && (baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1'))) {
+        console.log('⚠️  Running locally - delivery status tracking disabled');
+        baseUrl = undefined;
+      }
+
+      // Build message options
+      const messageOptions: any = {
         body,
         messagingServiceSid: this.messagingServiceSid,
         to,
-        statusCallback,
-      });
+      };
+
+      // Only add statusCallback if we have a valid public URL
+      if (baseUrl) {
+        messageOptions.statusCallback = `${baseUrl}/api/webhooks/delivery-status`;
+      }
+
+      const message = await this.twilioClient.messages.create(messageOptions);
 
       return {
         messageId: message.sid,

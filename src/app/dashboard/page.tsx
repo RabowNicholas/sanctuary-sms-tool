@@ -33,6 +33,10 @@ export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [testPhoneNumber, setTestPhoneNumber] = useState('');
+  const [isSendingTest, setIsSendingTest] = useState(false);
+  const [testSuccess, setTestSuccess] = useState('');
+  const [testError, setTestError] = useState('');
 
   const costCalculator = new CostCalculator();
 
@@ -139,6 +143,64 @@ export default function Dashboard() {
       setError('Failed to send broadcast');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSendTest = async () => {
+    // Validate phone number
+    if (!testPhoneNumber.trim()) {
+      setTestError('Please enter a phone number');
+      return;
+    }
+
+    const phoneRegex = /^\+1\d{10}$/;
+    if (!phoneRegex.test(testPhoneNumber)) {
+      setTestError('Invalid phone number format. Use +1XXXXXXXXXX (e.g., +18019416629)');
+      return;
+    }
+
+    // Validate message
+    if (!broadcastMessage.trim()) {
+      setTestError('Please enter a message');
+      return;
+    }
+
+    // Warn about unapproved links
+    if (detectedLinks.length > 0 && approvedLinks.size === 0) {
+      if (!confirm('No links are approved for tracking. Send without link tracking?')) {
+        return;
+      }
+    }
+
+    setIsSendingTest(true);
+    setTestError('');
+    setTestSuccess('');
+
+    try {
+      const response = await fetch('/api/broadcast/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phoneNumber: testPhoneNumber,
+          message: broadcastMessage,
+          campaignName: campaignName || undefined,
+          approvedLinks: Array.from(approvedLinks),
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setTestSuccess(`✅ Test message sent successfully to ${testPhoneNumber}! Cost: $${data.totalCost}`);
+        console.log('Test message sent:', data);
+      } else {
+        setTestError(data.error || 'Failed to send test message');
+      }
+    } catch (error) {
+      console.error('Error sending test message:', error);
+      setTestError('Failed to send test message. Please try again.');
+    } finally {
+      setIsSendingTest(false);
     }
   };
 
@@ -371,6 +433,50 @@ export default function Dashboard() {
                   {success}
                 </div>
               )}
+
+              {/* Test Message Section */}
+              <div className="mb-6 p-4 bg-blue-900/20 border border-blue-700 rounded-lg">
+                <h3 className="text-lg font-semibold text-blue-300 mb-3">
+                  📱 Send Test Message
+                </h3>
+                <p className="text-sm text-gray-300 mb-4">
+                  Send this message to a single phone number to verify links and content before broadcasting to all subscribers.
+                </p>
+
+                <div className="flex gap-3">
+                  <div className="flex-1">
+                    <input
+                      type="tel"
+                      value={testPhoneNumber}
+                      onChange={(e) => setTestPhoneNumber(e.target.value)}
+                      placeholder="+18019416629"
+                      className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">
+                      Format: +1XXXXXXXXXX (US numbers only)
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleSendTest}
+                    disabled={isSendingTest || !broadcastMessage.trim() || !testPhoneNumber.trim()}
+                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed font-medium transition-colors"
+                  >
+                    {isSendingTest ? 'Sending...' : 'Send Test'}
+                  </button>
+                </div>
+
+                {testSuccess && (
+                  <div className="mt-3 p-3 bg-green-900/20 border border-green-700 rounded text-green-300 text-sm">
+                    {testSuccess}
+                  </div>
+                )}
+
+                {testError && (
+                  <div className="mt-3 p-3 bg-red-900/20 border border-red-700 rounded text-red-300 text-sm">
+                    {testError}
+                  </div>
+                )}
+              </div>
 
               {/* Send Button */}
               <button

@@ -3,15 +3,22 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 
+interface SubscriberList {
+  id: string;
+  name: string;
+}
+
 interface Subscriber {
   id: string;
   phoneNumber: string;
   isActive: boolean;
   joinedAt: string;
+  joinedViaKeyword?: string;
   slackThreadTs?: string;
   _count?: {
     messages: number;
   };
+  lists?: SubscriberList[];
 }
 
 export default function SubscribersPage() {
@@ -340,6 +347,9 @@ export default function SubscribersPage() {
                       Status
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                      Lists
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                       Joined Date
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
@@ -353,8 +363,15 @@ export default function SubscribersPage() {
                 <tbody className="bg-gray-800 divide-y divide-gray-600">
                   {filteredSubscribers.map((subscriber) => (
                     <tr key={subscriber.id} className="hover:bg-gray-700 transition-colors duration-200">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-200">
-                        {formatPhoneNumber(subscriber.phoneNumber)}
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-medium text-gray-200">
+                          {formatPhoneNumber(subscriber.phoneNumber)}
+                        </div>
+                        {subscriber.joinedViaKeyword && (
+                          <div className="text-xs text-gray-500">
+                            via {subscriber.joinedViaKeyword}
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span
@@ -366,6 +383,23 @@ export default function SubscribersPage() {
                         >
                           {subscriber.isActive ? 'Active' : 'Inactive'}
                         </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-wrap gap-1">
+                          {subscriber.lists && subscriber.lists.length > 0 ? (
+                            subscriber.lists.map((list) => (
+                              <Link
+                                key={list.id}
+                                href={`/dashboard/lists/${list.id}`}
+                                className="px-2 py-0.5 text-xs bg-purple-900 text-purple-300 rounded hover:bg-purple-800 transition-colors"
+                              >
+                                {list.name}
+                              </Link>
+                            ))
+                          ) : (
+                            <span className="text-xs text-gray-500">-</span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                         {formatDate(subscriber.joinedAt)}

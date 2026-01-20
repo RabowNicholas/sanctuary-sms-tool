@@ -9,6 +9,8 @@ interface BroadcastRequest {
   message: string;
   campaignName?: string;
   approvedLinks?: string[];
+  targetAll?: boolean;      // If true, send to all active subscribers (default: true)
+  targetListIds?: string[]; // List IDs to target (union of lists)
 }
 
 export async function POST(request: NextRequest) {
@@ -32,13 +34,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get active subscribers
+    // Determine targeting
+    const targetAll = body.targetAll !== false; // Default to true
+    const targetListIds = body.targetListIds || [];
+
+    // Get active subscribers based on targeting
     const subscriberRepo = new PrismaSubscriberRepository(prisma);
-    const activeSubscribers = await subscriberRepo.findAllActive();
+    let activeSubscribers;
+
+    if (targetAll || targetListIds.length === 0) {
+      // Target all active subscribers
+      activeSubscribers = await subscriberRepo.findAllActive();
+    } else {
+      // Target specific lists (union)
+      activeSubscribers = await subscriberRepo.findActiveByListIds(targetListIds);
+    }
 
     if (activeSubscribers.length === 0) {
       return NextResponse.json(
-        { error: 'No active subscribers found' },
+        { error: 'No active subscribers found for the selected target' },
         { status: 400 }
       );
     }
@@ -50,6 +64,7 @@ export async function POST(request: NextRequest) {
     // Create broadcast record (non-blocking - analytics only)
     let broadcast: any = null;
     let broadcastId: string | null = null;
+    const effectiveTargetAll = targetAll || targetListIds.length === 0;
 
     try {
       broadcast = await prisma.broadcast.create({
@@ -58,10 +73,23 @@ export async function POST(request: NextRequest) {
           message: body.message,
           sentCount: activeSubscribers.length,
           totalCost,
+          targetAll: effectiveTargetAll,
         },
       });
       broadcastId = broadcast.id;
-      console.log(`📊 Created broadcast campaign: ${broadcast.id} ${body.campaignName ? `(${body.campaignName})` : ''}`);
+
+      // Create BroadcastTarget records if targeting specific lists
+      if (!effectiveTargetAll && targetListIds.length > 0) {
+        await prisma.broadcastTarget.createMany({
+          data: targetListIds.map((listId: string) => ({
+            broadcastId: broadcast.id,
+            listId,
+          })),
+        });
+        console.log(`📊 Created broadcast campaign: ${broadcast.id} targeting ${targetListIds.length} list(s)`);
+      } else {
+        console.log(`📊 Created broadcast campaign: ${broadcast.id} targeting all subscribers`);
+      }
     } catch (error) {
       console.error('⚠️ Failed to create broadcast record (continuing without tracking):', error);
       // Continue without broadcast tracking - messages will still be sent
@@ -175,13 +203,15 @@ export async function POST(request: NextRequest) {
     // Return summary
     return NextResponse.json({
       success: true,
-      broadcastId: broadcast.id,
-      campaignName: broadcast.name,
+      broadcastId: broadcast?.id || null,
+      campaignName: broadcast?.name || null,
       sentTo: results.length,
       failed: errors.length,
       totalCost: totalCost.toFixed(2),
       segmentCount: costCalculator.calculateSegments(body.message),
       linksTracked: links.length,
+      targetAll: effectiveTargetAll,
+      targetedLists: effectiveTargetAll ? null : targetListIds.length,
       results: results.slice(0, 10), // Return first 10 for reference
       errors: errors.slice(0, 5), // Return first 5 errors
     });

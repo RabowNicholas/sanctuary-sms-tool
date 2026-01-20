@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@/generated/prisma';
 import { PrismaSubscriberRepository } from '@/infrastructure/database/repositories/PrismaSubscriberRepository';
-import { PrismaAppConfigRepository } from '@/infrastructure/database/repositories/PrismaAppConfigRepository';
+import { PrismaSignupKeywordRepository } from '@/infrastructure/database/repositories/PrismaSignupKeywordRepository';
+import { PrismaSubscriberListRepository } from '@/infrastructure/database/repositories/PrismaSubscriberListRepository';
 import { TwilioSMSService } from '@/infrastructure/sms/TwilioSMSService';
 import { ProcessInboundMessage } from '@/domain/usecases/ProcessInboundMessage';
 
@@ -52,7 +53,8 @@ export async function POST(request: NextRequest) {
     // Initialize services
     const prisma = new PrismaClient();
     const subscriberRepo = new PrismaSubscriberRepository(prisma);
-    const configRepo = new PrismaAppConfigRepository(prisma);
+    const keywordRepo = new PrismaSignupKeywordRepository(prisma);
+    const listRepo = new PrismaSubscriberListRepository(prisma);
 
     const twilioConfig = {
       accountSid: process.env.TWILIO_ACCOUNT_SID || 'ACtest123',
@@ -69,14 +71,13 @@ export async function POST(request: NextRequest) {
     };
     const slackService = new SlackNotificationService(slackConfig);
 
-    // Fetch welcome message from config
-    const welcomeMessage = await configRepo.getWelcomeMessage();
-
     const messageProcessor = new ProcessInboundMessage(
       subscriberRepo,
+      keywordRepo,
+      listRepo,
       twilioService,
       slackService,
-      welcomeMessage
+      'Welcome!' // Default fallback message
     );
 
     // Process the inbound message
@@ -124,7 +125,7 @@ export async function POST(request: NextRequest) {
 
         console.log('📤 SMS response sent');
 
-        // Mark TRIBE opt-in messages as read after response is sent
+        // Mark opt-in messages as read after response is sent
         if (result.isOptIn) {
           try {
             const subscriber = await subscriberRepo.findByPhoneNumber(payload.From);
@@ -133,10 +134,10 @@ export async function POST(request: NextRequest) {
                 where: { id: subscriber.id },
                 data: { lastReadAt: new Date() }
               });
-              console.log('✅ TRIBE opt-in conversation marked as read');
+              console.log(`✅ Opt-in conversation marked as read (keyword: ${result.matchedKeyword || 'unknown'})`);
             }
           } catch (error) {
-            console.error('❌ Failed to mark TRIBE conversation as read:', error);
+            console.error('❌ Failed to mark opt-in conversation as read:', error);
           }
         }
       } catch (error) {

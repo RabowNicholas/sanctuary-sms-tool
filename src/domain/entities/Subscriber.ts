@@ -4,19 +4,22 @@ export class Subscriber {
   public isActive: boolean;
   public readonly joinedAt: Date;
   public slackThreadTs?: string;
+  public joinedViaKeyword?: string;
 
   private constructor(
     id: string,
     phoneNumber: string,
     isActive: boolean = true,
     joinedAt: Date = new Date(),
-    slackThreadTs?: string
+    slackThreadTs?: string,
+    joinedViaKeyword?: string
   ) {
     this.id = id;
     this.phoneNumber = phoneNumber;
     this.isActive = isActive;
     this.joinedAt = joinedAt;
     this.slackThreadTs = slackThreadTs;
+    this.joinedViaKeyword = joinedViaKeyword;
   }
 
   static isValidPhoneNumber(phoneNumber: string): boolean {
@@ -34,13 +37,13 @@ export class Subscriber {
     return phoneNumber;
   }
 
-  static create(phoneNumber: string): Subscriber {
+  static create(phoneNumber: string, joinedViaKeyword?: string): Subscriber {
     if (!this.isValidPhoneNumber(phoneNumber)) {
       throw new Error('Invalid US phone number');
     }
 
     const id = this.generateId();
-    return new Subscriber(id, phoneNumber);
+    return new Subscriber(id, phoneNumber, true, new Date(), undefined, joinedViaKeyword);
   }
 
   static fromPersistence(
@@ -48,9 +51,10 @@ export class Subscriber {
     phoneNumber: string,
     isActive: boolean,
     joinedAt: Date,
-    slackThreadTs?: string
+    slackThreadTs?: string,
+    joinedViaKeyword?: string
   ): Subscriber {
-    return new Subscriber(id, phoneNumber, isActive, joinedAt, slackThreadTs);
+    return new Subscriber(id, phoneNumber, isActive, joinedAt, slackThreadTs, joinedViaKeyword);
   }
 
   private static generateId(): string {

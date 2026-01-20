@@ -12,10 +12,26 @@ export async function GET() {
         _count: {
           select: { messages: true },
         },
+        listMemberships: {
+          include: {
+            list: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
       },
     });
 
-    return NextResponse.json(subscribers);
+    // Transform to include lists at top level for easier access
+    const result = subscribers.map(sub => ({
+      ...sub,
+      lists: sub.listMemberships.map(m => m.list),
+    }));
+
+    return NextResponse.json(result);
   } catch (error) {
     console.error('Get subscribers error:', error);
     return NextResponse.json(

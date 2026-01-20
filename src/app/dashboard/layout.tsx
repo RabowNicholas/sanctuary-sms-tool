@@ -88,6 +88,26 @@ export default function DashboardLayout({
                 Subscribers
               </Link>
               <Link
+                href="/dashboard/keywords"
+                className={`text-sm font-medium transition-colors duration-200 ${
+                  isActive('/dashboard/keywords')
+                    ? 'text-white'
+                    : 'text-gray-300 hover:text-white'
+                }`}
+              >
+                Keywords
+              </Link>
+              <Link
+                href="/dashboard/lists"
+                className={`text-sm font-medium transition-colors duration-200 ${
+                  isActive('/dashboard/lists')
+                    ? 'text-white'
+                    : 'text-gray-300 hover:text-white'
+                }`}
+              >
+                Lists
+              </Link>
+              <Link
                 href="/dashboard/settings"
                 className={`text-sm font-medium transition-colors duration-200 ${
                   isActive('/dashboard/settings')

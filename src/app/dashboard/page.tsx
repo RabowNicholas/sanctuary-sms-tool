@@ -18,6 +18,12 @@ interface DashboardStats {
   todayMessages: number;
 }
 
+interface SubscriberList {
+  id: string;
+  name: string;
+  memberCount: number;
+}
+
 export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats>({
     totalSubscribers: 0,
@@ -37,6 +43,12 @@ export default function Dashboard() {
   const [isSendingTest, setIsSendingTest] = useState(false);
   const [testSuccess, setTestSuccess] = useState('');
   const [testError, setTestError] = useState('');
+
+  // Targeting state
+  const [lists, setLists] = useState<SubscriberList[]>([]);
+  const [targetAll, setTargetAll] = useState(true);
+  const [selectedListIds, setSelectedListIds] = useState<Set<string>>(new Set());
+  const [targetedRecipientCount, setTargetedRecipientCount] = useState(0);
 
   const costCalculator = new CostCalculator();
 
@@ -62,24 +74,46 @@ export default function Dashboard() {
 
   const loadDashboardData = async () => {
     try {
-      const [statsResponse, inboxStatsResponse] = await Promise.all([
+      const [statsResponse, inboxStatsResponse, listsResponse] = await Promise.all([
         fetch('/api/dashboard/stats'),
         fetch('/api/inbox/stats'),
+        fetch('/api/lists'),
       ]);
 
       if (statsResponse.ok) {
         const statsData = await statsResponse.json();
         setStats(statsData);
+        setTargetedRecipientCount(statsData.activeSubscribers);
       }
 
       if (inboxStatsResponse.ok) {
         const inboxStatsData = await inboxStatsResponse.json();
         setUnreadCount(inboxStatsData.unreadCount);
       }
+
+      if (listsResponse.ok) {
+        const listsData = await listsResponse.json();
+        setLists(listsData);
+      }
     } catch (err) {
       console.error('Failed to load dashboard data:', err);
     }
   };
+
+  // Calculate targeted recipient count when targeting changes
+  useEffect(() => {
+    if (targetAll) {
+      setTargetedRecipientCount(stats.activeSubscribers);
+    } else if (selectedListIds.size === 0) {
+      setTargetedRecipientCount(0);
+    } else {
+      // Calculate union of selected lists (approximation - exact count would need API call)
+      const selectedLists = lists.filter(l => selectedListIds.has(l.id));
+      const totalMembers = selectedLists.reduce((sum, l) => sum + l.memberCount, 0);
+      // This is an approximation - actual count may be less due to overlap
+      setTargetedRecipientCount(Math.min(totalMembers, stats.activeSubscribers));
+    }
+  }, [targetAll, selectedListIds, lists, stats.activeSubscribers]);
 
   const toggleLinkApproval = (link: string) => {
     setApprovedLinks(prev => {
@@ -124,16 +158,23 @@ export default function Dashboard() {
           message: broadcastMessage,
           campaignName: campaignName.trim() || undefined,
           approvedLinks: Array.from(approvedLinks),
+          targetAll,
+          targetListIds: targetAll ? [] : Array.from(selectedListIds),
         }),
       });
 
       if (response.ok) {
         const result = await response.json();
-        setSuccess(`Broadcast sent to ${result.sentTo} subscribers! Cost: $${result.totalCost}${result.linksTracked > 0 ? ` (${result.linksTracked} link(s) tracked)` : ''}`);
+        const targetInfo = result.targetAll
+          ? ''
+          : ` (targeted ${result.targetedLists} list${result.targetedLists !== 1 ? 's' : ''})`;
+        setSuccess(`Broadcast sent to ${result.sentTo} subscribers! Cost: $${result.totalCost}${result.linksTracked > 0 ? ` (${result.linksTracked} link(s) tracked)` : ''}${targetInfo}`);
         setBroadcastMessage('');
         setCampaignName('');
         setDetectedLinks([]);
         setApprovedLinks(new Set());
+        setTargetAll(true);
+        setSelectedListIds(new Set());
         loadDashboardData(); // Refresh stats
       } else {
         const errorData = await response.json();
@@ -144,6 +185,18 @@ export default function Dashboard() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const toggleListSelection = (listId: string) => {
+    setSelectedListIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(listId)) {
+        newSet.delete(listId);
+      } else {
+        newSet.add(listId);
+      }
+      return newSet;
+    });
   };
 
   const handleSendTest = async () => {
@@ -248,7 +301,7 @@ export default function Dashboard() {
 
   const costBreakdown = costCalculator.getCostBreakdown(
     getProcessedMessageForCost(),
-    stats.activeSubscribers
+    targetedRecipientCount
   );
 
   return (
@@ -392,13 +445,73 @@ export default function Dashboard() {
                 </div>
               )}
 
+              {/* Targeting */}
+              {lists.length > 0 && (
+                <div className="bg-gray-700 p-4 rounded-md border border-gray-600">
+                  <h3 className="font-medium text-gray-200 mb-3">Target Audience</h3>
+
+                  <div className="space-y-3">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="radio"
+                        checked={targetAll}
+                        onChange={() => setTargetAll(true)}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-white">All Subscribers</span>
+                      <span className="text-gray-400 text-sm">({stats.activeSubscribers})</span>
+                    </label>
+
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="radio"
+                        checked={!targetAll}
+                        onChange={() => setTargetAll(false)}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-white">Specific Lists</span>
+                    </label>
+
+                    {!targetAll && (
+                      <div className="ml-7 space-y-2 pt-2">
+                        {lists.map((list) => (
+                          <label
+                            key={list.id}
+                            className="flex items-center gap-3 cursor-pointer p-2 bg-gray-800 rounded hover:bg-gray-750 transition-colors"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedListIds.has(list.id)}
+                              onChange={() => toggleListSelection(list.id)}
+                              className="h-4 w-4 rounded border-gray-500 text-purple-600 focus:ring-purple-500"
+                            />
+                            <span className="text-white">{list.name}</span>
+                            <span className="text-gray-400 text-sm">({list.memberCount})</span>
+                          </label>
+                        ))}
+                        {selectedListIds.size === 0 && (
+                          <p className="text-orange-400 text-sm">
+                            Select at least one list
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Cost Breakdown */}
               <div className="bg-gray-700 p-4 rounded-md border border-gray-600">
                 <h3 className="font-medium text-gray-200 mb-2">Cost Estimate</h3>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <span className="text-gray-400">Recipients:</span>
-                    <span className="ml-2 font-medium text-white">{stats.activeSubscribers}</span>
+                    <span className="ml-2 font-medium text-white">
+                      {targetedRecipientCount}
+                      {!targetAll && selectedListIds.size > 1 && (
+                        <span className="text-gray-500 text-xs ml-1">(approx)</span>
+                      )}
+                    </span>
                   </div>
                   <div>
                     <span className="text-gray-400">Segments:</span>
@@ -481,10 +594,17 @@ export default function Dashboard() {
               {/* Send Button */}
               <button
                 onClick={handleSendBroadcast}
-                disabled={isLoading || !broadcastMessage.trim() || stats.activeSubscribers === 0}
+                disabled={
+                  isLoading ||
+                  !broadcastMessage.trim() ||
+                  targetedRecipientCount === 0 ||
+                  (!targetAll && selectedListIds.size === 0)
+                }
                 className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors duration-200"
               >
-                {isLoading ? 'Sending...' : `Send to ${stats.activeSubscribers} Subscribers`}
+                {isLoading
+                  ? 'Sending...'
+                  : `Send to ${targetedRecipientCount} Subscriber${targetedRecipientCount !== 1 ? 's' : ''}${!targetAll ? ' (Targeted)' : ''}`}
               </button>
             </div>
           </div>

@@ -11,15 +11,17 @@ datasource db {
 }
 
 model Subscriber {
-  id            String      @id @default(cuid())
-  phoneNumber   String      @unique
-  isActive      Boolean     @default(true)
-  joinedAt      DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  slackThreadTs String?     // Slack thread timestamp for grouping
-  lastReadAt    DateTime?   // When admin last read this conversation
-  messages      Message[]
-  linkClicks    LinkClick[]
+  id               String      @id @default(cuid())
+  phoneNumber      String      @unique
+  isActive         Boolean     @default(true)
+  joinedAt         DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  slackThreadTs    String?     // Slack thread timestamp for grouping
+  lastReadAt       DateTime?   // When admin last read this conversation
+  joinedViaKeyword String?     // Keyword used to subscribe (e.g., "TRIBE", "FLOW")
+  messages         Message[]
+  linkClicks       LinkClick[]
+  listMemberships  SubscriberListMembership[]
 
   @@map("subscribers")
 }
@@ -55,9 +57,11 @@ model Broadcast {
   message    String    // Original message content
   sentCount  Int       // Number of messages sent
   totalCost  Float     // Total cost in dollars
+  targetAll  Boolean   @default(true)  // If true, targets all subscribers
   createdAt  DateTime  @default(now())
   messages   Message[]
   links      Link[]
+  targets    BroadcastTarget[]
 
   @@map("broadcasts")
 }
@@ -83,6 +87,56 @@ model LinkClick {
   clickedAt    DateTime   @default(now())
 
   @@map("link_clicks")
+}
+
+model SignupKeyword {
+  id           String          @id @default(cuid())
+  keyword      String          @unique    // "TRIBE", "FLOW", etc.
+  autoResponse String                     // Welcome message for this keyword
+  isActive     Boolean         @default(true)
+  listId       String?                    // Auto-add subscribers to this list
+  list         SubscriberList? @relation(fields: [listId], references: [id])
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@map("signup_keywords")
+}
+
+model SubscriberList {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  subscribers SubscriberListMembership[]
+  keywords    SignupKeyword[]
+  broadcasts  BroadcastTarget[]
+
+  @@map("subscriber_lists")
+}
+
+model SubscriberListMembership {
+  id           String         @id @default(cuid())
+  subscriberId String
+  listId       String
+  joinedAt     DateTime       @default(now())
+  joinedVia    String?        // "keyword:FLOW", "manual", etc.
+  subscriber   Subscriber     @relation(fields: [subscriberId], references: [id], onDelete: Cascade)
+  list         SubscriberList @relation(fields: [listId], references: [id], onDelete: Cascade)
+
+  @@unique([subscriberId, listId])
+  @@map("subscriber_list_memberships")
+}
+
+model BroadcastTarget {
+  id          String         @id @default(cuid())
+  broadcastId String
+  listId      String
+  broadcast   Broadcast      @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  list        SubscriberList @relation(fields: [listId], references: [id], onDelete: Cascade)
+
+  @@unique([broadcastId, listId])
+  @@map("broadcast_targets")
 }
 
 enum Direction {

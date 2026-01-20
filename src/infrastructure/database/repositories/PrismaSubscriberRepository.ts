@@ -13,6 +13,7 @@ export class PrismaSubscriberRepository implements SubscriberRepository {
         isActive: subscriber.isActive,
         joinedAt: subscriber.joinedAt,
         slackThreadTs: subscriber.slackThreadTs,
+        joinedViaKeyword: subscriber.joinedViaKeyword,
       },
     });
 
@@ -21,7 +22,8 @@ export class PrismaSubscriberRepository implements SubscriberRepository {
       created.phoneNumber,
       created.isActive,
       created.joinedAt,
-      created.slackThreadTs || undefined
+      created.slackThreadTs || undefined,
+      created.joinedViaKeyword || undefined
     );
   }
 
@@ -39,7 +41,27 @@ export class PrismaSubscriberRepository implements SubscriberRepository {
       found.phoneNumber,
       found.isActive,
       found.joinedAt,
-      found.slackThreadTs || undefined
+      found.slackThreadTs || undefined,
+      found.joinedViaKeyword || undefined
+    );
+  }
+
+  async findById(id: string): Promise<Subscriber | null> {
+    const found = await this.prisma.subscriber.findUnique({
+      where: { id },
+    });
+
+    if (!found) {
+      return null;
+    }
+
+    return Subscriber.fromPersistence(
+      found.id,
+      found.phoneNumber,
+      found.isActive,
+      found.joinedAt,
+      found.slackThreadTs || undefined,
+      found.joinedViaKeyword || undefined
     );
   }
 
@@ -49,6 +71,7 @@ export class PrismaSubscriberRepository implements SubscriberRepository {
       data: {
         isActive: subscriber.isActive,
         slackThreadTs: subscriber.slackThreadTs,
+        joinedViaKeyword: subscriber.joinedViaKeyword,
       },
     });
 
@@ -57,7 +80,8 @@ export class PrismaSubscriberRepository implements SubscriberRepository {
       updated.phoneNumber,
       updated.isActive,
       updated.joinedAt,
-      updated.slackThreadTs || undefined
+      updated.slackThreadTs || undefined,
+      updated.joinedViaKeyword || undefined
     );
   }
 
@@ -73,7 +97,39 @@ export class PrismaSubscriberRepository implements SubscriberRepository {
         sub.phoneNumber,
         sub.isActive,
         sub.joinedAt,
-        sub.slackThreadTs || undefined
+        sub.slackThreadTs || undefined,
+        sub.joinedViaKeyword || undefined
+      )
+    );
+  }
+
+  async findActiveByListIds(listIds: string[]): Promise<Subscriber[]> {
+    if (listIds.length === 0) {
+      return [];
+    }
+
+    const subscribers = await this.prisma.subscriber.findMany({
+      where: {
+        isActive: true,
+        listMemberships: {
+          some: {
+            listId: {
+              in: listIds,
+            },
+          },
+        },
+      },
+      orderBy: { joinedAt: 'asc' },
+    });
+
+    return subscribers.map(sub =>
+      Subscriber.fromPersistence(
+        sub.id,
+        sub.phoneNumber,
+        sub.isActive,
+        sub.joinedAt,
+        sub.slackThreadTs || undefined,
+        sub.joinedViaKeyword || undefined
       )
     );
   }

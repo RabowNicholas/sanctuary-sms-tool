@@ -1,5 +1,8 @@
 import { SubscriberRepository } from '../repositories/SubscriberRepository';
+import { SignupKeywordRepository } from '../repositories/SignupKeywordRepository';
+import { SubscriberListRepository } from '../repositories/SubscriberListRepository';
 import { Subscriber } from '../entities/Subscriber';
+import { SignupKeyword } from '../entities/SignupKeyword';
 
 export interface ProcessInboundMessageResult {
   shouldRespond: boolean;
@@ -7,6 +10,7 @@ export interface ProcessInboundMessageResult {
   notifySlack: boolean;
   slackMessage?: string;
   isOptIn?: boolean;
+  matchedKeyword?: string;
 }
 
 export interface TwilioService {
@@ -18,14 +22,15 @@ export interface SlackService {
 }
 
 export class ProcessInboundMessage {
-  private readonly OPT_IN_KEYWORDS = ['TRIBE'];
   private readonly OPT_OUT_KEYWORDS = ['STOP', 'UNSUBSCRIBE'];
 
   constructor(
     private subscriberRepository: SubscriberRepository,
+    private keywordRepository: SignupKeywordRepository,
+    private listRepository: SubscriberListRepository,
     private twilioService: TwilioService,
     private slackService: SlackService,
-    private welcomeMessage: string = "Welcome to SANCTUARY!"
+    private defaultWelcomeMessage: string = "Welcome!"
   ) {}
 
   async execute(phoneNumber: string, message: string): Promise<ProcessInboundMessageResult> {
@@ -37,9 +42,10 @@ export class ProcessInboundMessage {
     const normalizedMessage = message.trim().toUpperCase();
     const existingSubscriber = await this.subscriberRepository.findByPhoneNumber(phoneNumber);
 
-    // Handle opt-in keywords
-    if (this.OPT_IN_KEYWORDS.includes(normalizedMessage)) {
-      return this.handleOptIn(phoneNumber, existingSubscriber);
+    // Check for dynamic signup keywords
+    const matchedKeyword = await this.keywordRepository.findByKeyword(normalizedMessage);
+    if (matchedKeyword && matchedKeyword.isActive) {
+      return this.handleOptIn(phoneNumber, existingSubscriber, matchedKeyword);
     }
 
     // Handle opt-out keywords
@@ -53,43 +59,74 @@ export class ProcessInboundMessage {
 
   private async handleOptIn(
     phoneNumber: string,
-    existingSubscriber: Subscriber | null
+    existingSubscriber: Subscriber | null,
+    keyword: SignupKeyword
   ): Promise<ProcessInboundMessageResult> {
     if (existingSubscriber) {
       if (existingSubscriber.isActive) {
-        // Already subscribed
+        // Already subscribed - but might need to add to keyword's list
+        if (keyword.listId) {
+          await this.listRepository.addMember(
+            keyword.listId,
+            existingSubscriber.id,
+            `keyword:${keyword.keyword}`
+          );
+        }
+
         return {
           shouldRespond: true,
-          response: "You're already in the tribe!",
+          response: "You're already subscribed!",
           notifySlack: false,
           isOptIn: true,
+          matchedKeyword: keyword.keyword,
         };
       } else {
         // Reactivate deactivated subscriber
         existingSubscriber.activate();
+        existingSubscriber.joinedViaKeyword = keyword.keyword;
         await this.subscriberRepository.update(existingSubscriber);
+
+        // Add to keyword's list if specified
+        if (keyword.listId) {
+          await this.listRepository.addMember(
+            keyword.listId,
+            existingSubscriber.id,
+            `keyword:${keyword.keyword}`
+          );
+        }
 
         const formattedPhone = Subscriber.formatPhoneNumber(phoneNumber);
         return {
           shouldRespond: true,
-          response: "Welcome back! You're subscribed again.",
+          response: keyword.autoResponse || "Welcome back! You're subscribed again.",
           notifySlack: true,
-          slackMessage: `🔄 Subscriber reactivated: ${formattedPhone} rejoined the tribe!`,
+          slackMessage: `🔄 Subscriber reactivated: ${formattedPhone} rejoined via ${keyword.keyword}!`,
           isOptIn: true,
+          matchedKeyword: keyword.keyword,
         };
       }
     } else {
       // New subscriber
-      const newSubscriber = Subscriber.create(phoneNumber);
+      const newSubscriber = Subscriber.create(phoneNumber, keyword.keyword);
       await this.subscriberRepository.add(newSubscriber);
+
+      // Add to keyword's list if specified
+      if (keyword.listId) {
+        await this.listRepository.addMember(
+          keyword.listId,
+          newSubscriber.id,
+          `keyword:${keyword.keyword}`
+        );
+      }
 
       const formattedPhone = Subscriber.formatPhoneNumber(phoneNumber);
       return {
         shouldRespond: true,
-        response: this.welcomeMessage,
+        response: keyword.autoResponse || this.defaultWelcomeMessage,
         notifySlack: true,
-        slackMessage: `✅ New subscriber: ${formattedPhone} joined the tribe!`,
+        slackMessage: `✅ New subscriber: ${formattedPhone} joined via ${keyword.keyword}!`,
         isOptIn: true,
+        matchedKeyword: keyword.keyword,
       };
     }
   }
@@ -102,10 +139,17 @@ export class ProcessInboundMessage {
       existingSubscriber.deactivate();
       await this.subscriberRepository.update(existingSubscriber);
 
+      // Get available keywords for rejoin message
+      const activeKeywords = await this.keywordRepository.findAllActive();
+      const keywordList = activeKeywords.map(k => k.keyword).join(' or ');
+      const rejoinMessage = keywordList
+        ? `Text ${keywordList} to rejoin.`
+        : 'Text to rejoin.';
+
       const formattedPhone = Subscriber.formatPhoneNumber(phoneNumber);
       return {
         shouldRespond: true,
-        response: "You've been unsubscribed. Text TRIBE to rejoin.",
+        response: `You've been unsubscribed. ${rejoinMessage}`,
         notifySlack: true,
         slackMessage: `❌ Subscriber left: ${formattedPhone} unsubscribed`,
       };
@@ -125,7 +169,7 @@ export class ProcessInboundMessage {
   ): Promise<ProcessInboundMessageResult> {
     if (existingSubscriber && existingSubscriber.isActive) {
       // Message from active subscriber - notify Slack
-      const slackMessage = `📱 New message from ${existingSubscriber.formattedPhoneNumber}:\\n\\n${message}`;
+      const slackMessage = `📱 New message from ${existingSubscriber.formattedPhoneNumber}:\n\n${message}`;
       return {
         shouldRespond: false,
         notifySlack: true,
@@ -133,9 +177,16 @@ export class ProcessInboundMessage {
       };
     } else {
       // Message from non-subscriber or inactive subscriber
+      // Get available keywords for subscribe message
+      const activeKeywords = await this.keywordRepository.findAllActive();
+      const keywordList = activeKeywords.map(k => k.keyword).join(' or ');
+      const subscribeMessage = keywordList
+        ? `Text ${keywordList} to subscribe to updates.`
+        : 'Text to subscribe to updates.';
+
       return {
         shouldRespond: true,
-        response: "Text TRIBE to subscribe to updates.",
+        response: subscribeMessage,
         notifySlack: false,
       };
     }

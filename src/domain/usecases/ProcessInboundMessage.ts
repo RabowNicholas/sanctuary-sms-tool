@@ -1,8 +1,8 @@
-import { SubscriberRepository } from '../repositories/SubscriberRepository';
-import { SignupKeywordRepository } from '../repositories/SignupKeywordRepository';
-import { SubscriberListRepository } from '../repositories/SubscriberListRepository';
-import { Subscriber } from '../entities/Subscriber';
-import { SignupKeyword } from '../entities/SignupKeyword';
+import { SubscriberRepository } from "../repositories/SubscriberRepository";
+import { SignupKeywordRepository } from "../repositories/SignupKeywordRepository";
+import { SubscriberListRepository } from "../repositories/SubscriberListRepository";
+import { Subscriber } from "../entities/Subscriber";
+import { SignupKeyword } from "../entities/SignupKeyword";
 
 export interface ProcessInboundMessageResult {
   shouldRespond: boolean;
@@ -22,7 +22,7 @@ export interface SlackService {
 }
 
 export class ProcessInboundMessage {
-  private readonly OPT_OUT_KEYWORDS = ['STOP', 'UNSUBSCRIBE'];
+  private readonly OPT_OUT_KEYWORDS = ["STOP", "UNSUBSCRIBE"];
 
   constructor(
     private subscriberRepository: SubscriberRepository,
@@ -30,20 +30,25 @@ export class ProcessInboundMessage {
     private listRepository: SubscriberListRepository,
     private twilioService: TwilioService,
     private slackService: SlackService,
-    private defaultWelcomeMessage: string = "Welcome!"
+    private defaultWelcomeMessage: string = "Welcome!",
   ) {}
 
-  async execute(phoneNumber: string, message: string): Promise<ProcessInboundMessageResult> {
+  async execute(
+    phoneNumber: string,
+    message: string,
+  ): Promise<ProcessInboundMessageResult> {
     // Validate phone number
     if (!Subscriber.isValidPhoneNumber(phoneNumber)) {
-      throw new Error('Invalid US phone number');
+      throw new Error("Invalid US phone number");
     }
 
     const normalizedMessage = message.trim().toUpperCase();
-    const existingSubscriber = await this.subscriberRepository.findByPhoneNumber(phoneNumber);
+    const existingSubscriber =
+      await this.subscriberRepository.findByPhoneNumber(phoneNumber);
 
     // Check for dynamic signup keywords
-    const matchedKeyword = await this.keywordRepository.findByKeyword(normalizedMessage);
+    const matchedKeyword =
+      await this.keywordRepository.findByKeyword(normalizedMessage);
     if (matchedKeyword && matchedKeyword.isActive) {
       return this.handleOptIn(phoneNumber, existingSubscriber, matchedKeyword);
     }
@@ -60,7 +65,7 @@ export class ProcessInboundMessage {
   private async handleOptIn(
     phoneNumber: string,
     existingSubscriber: Subscriber | null,
-    keyword: SignupKeyword
+    keyword: SignupKeyword,
   ): Promise<ProcessInboundMessageResult> {
     if (existingSubscriber) {
       if (existingSubscriber.isActive) {
@@ -69,13 +74,13 @@ export class ProcessInboundMessage {
           await this.listRepository.addMember(
             keyword.listId,
             existingSubscriber.id,
-            `keyword:${keyword.keyword}`
+            `keyword:${keyword.keyword}`,
           );
         }
 
         return {
           shouldRespond: true,
-          response: "You're already subscribed!",
+          response: keyword.autoResponse || "You're already subscribed!",
           notifySlack: false,
           isOptIn: true,
           matchedKeyword: keyword.keyword,
@@ -91,14 +96,15 @@ export class ProcessInboundMessage {
           await this.listRepository.addMember(
             keyword.listId,
             existingSubscriber.id,
-            `keyword:${keyword.keyword}`
+            `keyword:${keyword.keyword}`,
           );
         }
 
         const formattedPhone = Subscriber.formatPhoneNumber(phoneNumber);
         return {
           shouldRespond: true,
-          response: keyword.autoResponse || "Welcome back! You're subscribed again.",
+          response:
+            keyword.autoResponse || "Welcome back! You're subscribed again.",
           notifySlack: true,
           slackMessage: `🔄 Subscriber reactivated: ${formattedPhone} rejoined via ${keyword.keyword}!`,
           isOptIn: true,
@@ -115,7 +121,7 @@ export class ProcessInboundMessage {
         await this.listRepository.addMember(
           keyword.listId,
           newSubscriber.id,
-          `keyword:${keyword.keyword}`
+          `keyword:${keyword.keyword}`,
         );
       }
 
@@ -133,7 +139,7 @@ export class ProcessInboundMessage {
 
   private async handleOptOut(
     phoneNumber: string,
-    existingSubscriber: Subscriber | null
+    existingSubscriber: Subscriber | null,
   ): Promise<ProcessInboundMessageResult> {
     if (existingSubscriber && existingSubscriber.isActive) {
       existingSubscriber.deactivate();
@@ -141,10 +147,10 @@ export class ProcessInboundMessage {
 
       // Get available keywords for rejoin message
       const activeKeywords = await this.keywordRepository.findAllActive();
-      const keywordList = activeKeywords.map(k => k.keyword).join(' or ');
+      const keywordList = activeKeywords.map((k) => k.keyword).join(" or ");
       const rejoinMessage = keywordList
         ? `Text ${keywordList} to rejoin.`
-        : 'Text to rejoin.';
+        : "Text to rejoin.";
 
       const formattedPhone = Subscriber.formatPhoneNumber(phoneNumber);
       return {
@@ -165,7 +171,7 @@ export class ProcessInboundMessage {
   private async handleRegularMessage(
     phoneNumber: string,
     message: string,
-    existingSubscriber: Subscriber | null
+    existingSubscriber: Subscriber | null,
   ): Promise<ProcessInboundMessageResult> {
     if (existingSubscriber && existingSubscriber.isActive) {
       // Message from active subscriber - notify Slack
@@ -179,10 +185,10 @@ export class ProcessInboundMessage {
       // Message from non-subscriber or inactive subscriber
       // Get available keywords for subscribe message
       const activeKeywords = await this.keywordRepository.findAllActive();
-      const keywordList = activeKeywords.map(k => k.keyword).join(' or ');
+      const keywordList = activeKeywords.map((k) => k.keyword).join(" or ");
       const subscribeMessage = keywordList
         ? `Text ${keywordList} to subscribe to updates.`
-        : 'Text to subscribe to updates.';
+        : "Text to subscribe to updates.";
 
       return {
         shouldRespond: true,

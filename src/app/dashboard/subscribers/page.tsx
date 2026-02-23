@@ -33,10 +33,25 @@ export default function SubscribersPage() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [importText, setImportText] = useState('');
   const [importMethod, setImportMethod] = useState<'text' | 'csv'>('text');
+  const [availableLists, setAvailableLists] = useState<SubscriberList[]>([]);
+  const [importListId, setImportListId] = useState('');
 
   useEffect(() => {
     loadSubscribers();
+    loadLists();
   }, []);
+
+  const loadLists = async () => {
+    try {
+      const response = await fetch('/api/lists');
+      if (response.ok) {
+        const data = await response.json();
+        setAvailableLists(data);
+      }
+    } catch {
+      // Non-critical — lists just won't be available in the dropdown
+    }
+  };
 
   const loadSubscribers = async () => {
     try {
@@ -188,16 +203,24 @@ export default function SubscribersPage() {
     }
 
     try {
+      const body: { phoneNumbers: string[]; listId?: string } = { phoneNumbers };
+      if (importListId) body.listId = importListId;
+
       const response = await fetch('/api/subscribers/bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phoneNumbers }),
+        body: JSON.stringify(body),
       });
 
       if (response.ok) {
         const result = await response.json();
-        setSuccess(`Successfully added ${result.added} subscribers. ${result.skipped} duplicates skipped.`);
+        let message = `Successfully added ${result.added} subscribers. ${result.skipped} duplicates skipped.`;
+        if (result.addedToList && result.listName) {
+          message += ` Added to list: ${result.listName}.`;
+        }
+        setSuccess(message);
         setImportText('');
+        setImportListId('');
         setShowImportModal(false);
         loadSubscribers();
       } else {
@@ -568,6 +591,25 @@ export default function SubscribersPage() {
                   </div>
                 )}
 
+                {/* List Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Add to List (optional)
+                  </label>
+                  <select
+                    value={importListId}
+                    onChange={(e) => setImportListId(e.target.value)}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">-- None --</option>
+                    {availableLists.map((list) => (
+                      <option key={list.id} value={list.id}>
+                        {list.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <div className="flex gap-3">
                   <button
                     onClick={handleBulkImport}
@@ -581,6 +623,7 @@ export default function SubscribersPage() {
                       setShowImportModal(false);
                       setImportText('');
                       setImportMethod('text');
+                      setImportListId('');
                     }}
                     className="flex-1 bg-gray-600 text-gray-200 py-2 px-4 rounded-lg hover:bg-gray-500 transition-colors duration-200"
                   >

@@ -48,6 +48,7 @@ export default function Dashboard() {
   const [lists, setLists] = useState<SubscriberList[]>([]);
   const [targetAll, setTargetAll] = useState(true);
   const [selectedListIds, setSelectedListIds] = useState<Set<string>>(new Set());
+  const [excludeListIds, setExcludeListIds] = useState<Set<string>>(new Set());
   const [targetedRecipientCount, setTargetedRecipientCount] = useState(0);
 
   const costCalculator = new CostCalculator();
@@ -102,18 +103,24 @@ export default function Dashboard() {
 
   // Calculate targeted recipient count when targeting changes
   useEffect(() => {
+    let count = 0;
     if (targetAll) {
-      setTargetedRecipientCount(stats.activeSubscribers);
-    } else if (selectedListIds.size === 0) {
-      setTargetedRecipientCount(0);
-    } else {
-      // Calculate union of selected lists (approximation - exact count would need API call)
+      count = stats.activeSubscribers;
+    } else if (selectedListIds.size > 0) {
       const selectedLists = lists.filter(l => selectedListIds.has(l.id));
-      const totalMembers = selectedLists.reduce((sum, l) => sum + l.memberCount, 0);
-      // This is an approximation - actual count may be less due to overlap
-      setTargetedRecipientCount(Math.min(totalMembers, stats.activeSubscribers));
+      count = Math.min(
+        selectedLists.reduce((sum, l) => sum + l.memberCount, 0),
+        stats.activeSubscribers
+      );
     }
-  }, [targetAll, selectedListIds, lists, stats.activeSubscribers]);
+    if (excludeListIds.size > 0) {
+      const excludedCount = lists
+        .filter(l => excludeListIds.has(l.id))
+        .reduce((sum, l) => sum + l.memberCount, 0);
+      count = Math.max(0, count - excludedCount);
+    }
+    setTargetedRecipientCount(count);
+  }, [targetAll, selectedListIds, excludeListIds, lists, stats.activeSubscribers]);
 
   const toggleLinkApproval = (link: string) => {
     setApprovedLinks(prev => {
@@ -160,6 +167,7 @@ export default function Dashboard() {
           approvedLinks: Array.from(approvedLinks),
           targetAll,
           targetListIds: targetAll ? [] : Array.from(selectedListIds),
+          excludeListIds: Array.from(excludeListIds),
         }),
       });
 
@@ -175,6 +183,7 @@ export default function Dashboard() {
         setApprovedLinks(new Set());
         setTargetAll(true);
         setSelectedListIds(new Set());
+        setExcludeListIds(new Set());
         loadDashboardData(); // Refresh stats
       } else {
         const errorData = await response.json();
@@ -196,6 +205,14 @@ export default function Dashboard() {
         newSet.add(listId);
       }
       return newSet;
+    });
+  };
+
+  const toggleExcludeListSelection = (listId: string) => {
+    setExcludeListIds(prev => {
+      const next = new Set(prev);
+      next.has(listId) ? next.delete(listId) : next.add(listId);
+      return next;
     });
   };
 
@@ -497,6 +514,41 @@ export default function Dashboard() {
                       </div>
                     )}
                   </div>
+                </div>
+              )}
+
+              {/* Exclude Lists */}
+              {lists.length > 0 && (
+                <div className="bg-gray-700 p-4 rounded-md border border-red-900/40 mt-3">
+                  <h3 className="font-medium text-gray-200 mb-1 text-sm">
+                    Exclude Lists{' '}
+                    <span className="text-gray-400 font-normal">(optional)</span>
+                  </h3>
+                  <p className="text-xs text-gray-400 mb-3">
+                    Subscribers in these lists will be removed from the send.
+                  </p>
+                  <div className="space-y-2">
+                    {lists.map((list) => (
+                      <label
+                        key={list.id}
+                        className="flex items-center gap-3 cursor-pointer p-2 bg-gray-800 rounded hover:bg-gray-750 transition-colors"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={excludeListIds.has(list.id)}
+                          onChange={() => toggleExcludeListSelection(list.id)}
+                          className="h-4 w-4 rounded border-gray-500 text-red-600 focus:ring-red-500"
+                        />
+                        <span className="text-white text-sm">{list.name}</span>
+                        <span className="text-gray-400 text-sm">({list.memberCount})</span>
+                      </label>
+                    ))}
+                  </div>
+                  {excludeListIds.size > 0 && (
+                    <p className="text-red-400 text-xs mt-2">
+                      -{excludeListIds.size} list{excludeListIds.size !== 1 ? 's' : ''} excluded
+                    </p>
+                  )}
                 </div>
               )}
 

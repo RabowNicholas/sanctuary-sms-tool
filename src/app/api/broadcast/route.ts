@@ -9,8 +9,9 @@ interface BroadcastRequest {
   message: string;
   campaignName?: string;
   approvedLinks?: string[];
-  targetAll?: boolean;      // If true, send to all active subscribers (default: true)
-  targetListIds?: string[]; // List IDs to target (union of lists)
+  targetAll?: boolean;         // If true, send to all active subscribers (default: true)
+  targetListIds?: string[];    // List IDs to include (union of lists)
+  excludeListIds?: string[];   // List IDs to exclude from send
 }
 
 export async function POST(request: NextRequest) {
@@ -36,18 +37,24 @@ export async function POST(request: NextRequest) {
 
     // Determine targeting
     const targetAll = body.targetAll !== false; // Default to true
-    const targetListIds = body.targetListIds || [];
+    const targetListIds: string[] = body.targetListIds || [];
+    const excludeListIds: string[] = body.excludeListIds || [];
+
+    const hasIncludes = !targetAll && targetListIds.length > 0;
+    const hasExcludes = excludeListIds.length > 0;
 
     // Get active subscribers based on targeting
     const subscriberRepo = new PrismaSubscriberRepository(prisma);
     let activeSubscribers;
 
-    if (targetAll || targetListIds.length === 0) {
-      // Target all active subscribers
-      activeSubscribers = await subscriberRepo.findAllActive();
-    } else {
-      // Target specific lists (union)
+    if (hasIncludes && hasExcludes) {
+      activeSubscribers = await subscriberRepo.findActiveByListIdsExcluding(targetListIds, excludeListIds);
+    } else if (hasIncludes) {
       activeSubscribers = await subscriberRepo.findActiveByListIds(targetListIds);
+    } else if (hasExcludes) {
+      activeSubscribers = await subscriberRepo.findAllActiveExcluding(excludeListIds);
+    } else {
+      activeSubscribers = await subscriberRepo.findAllActive();
     }
 
     if (activeSubscribers.length === 0) {
@@ -64,7 +71,7 @@ export async function POST(request: NextRequest) {
     // Create broadcast record (non-blocking - analytics only)
     let broadcast: any = null;
     let broadcastId: string | null = null;
-    const effectiveTargetAll = targetAll || targetListIds.length === 0;
+    const effectiveTargetAll = !hasIncludes && !hasExcludes;
 
     try {
       broadcast = await prisma.broadcast.create({
@@ -78,15 +85,16 @@ export async function POST(request: NextRequest) {
       });
       broadcastId = broadcast.id;
 
-      // Create BroadcastTarget records if targeting specific lists
-      if (!effectiveTargetAll && targetListIds.length > 0) {
-        await prisma.broadcastTarget.createMany({
-          data: targetListIds.map((listId: string) => ({
-            broadcastId: broadcast.id,
-            listId,
-          })),
-        });
-        console.log(`📊 Created broadcast campaign: ${broadcast.id} targeting ${targetListIds.length} list(s)`);
+      // Create BroadcastTarget records for include and exclude lists
+      if (!effectiveTargetAll) {
+        const targetRecords = [
+          ...targetListIds.map((listId: string) => ({ broadcastId: broadcast.id, listId, type: 'include' })),
+          ...excludeListIds.map((listId: string) => ({ broadcastId: broadcast.id, listId, type: 'exclude' })),
+        ];
+        if (targetRecords.length > 0) {
+          await prisma.broadcastTarget.createMany({ data: targetRecords });
+        }
+        console.log(`📊 Created broadcast campaign: ${broadcast.id} (${targetListIds.length} include, ${excludeListIds.length} exclude list(s))`);
       } else {
         console.log(`📊 Created broadcast campaign: ${broadcast.id} targeting all subscribers`);
       }

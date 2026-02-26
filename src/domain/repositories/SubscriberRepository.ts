@@ -7,5 +7,7 @@ export interface SubscriberRepository {
   update(subscriber: Subscriber): Promise<Subscriber>;
   findAllActive(): Promise<Subscriber[]>;
   findActiveByListIds(listIds: string[]): Promise<Subscriber[]>;
+  findAllActiveExcluding(excludeListIds: string[]): Promise<Subscriber[]>;
+  findActiveByListIdsExcluding(includeListIds: string[], excludeListIds: string[]): Promise<Subscriber[]>;
   count(): Promise<number>;
 }

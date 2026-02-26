@@ -132,10 +132,11 @@ model BroadcastTarget {
   id          String         @id @default(cuid())
   broadcastId String
   listId      String
+  type        String         @default("include")  // "include" | "exclude"
   broadcast   Broadcast      @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
   list        SubscriberList @relation(fields: [listId], references: [id], onDelete: Cascade)
 
-  @@unique([broadcastId, listId])
+  @@unique([broadcastId, listId, type])
   @@map("broadcast_targets")
 }
 

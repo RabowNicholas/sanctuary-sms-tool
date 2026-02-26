@@ -134,6 +134,43 @@ export class PrismaSubscriberRepository implements SubscriberRepository {
     );
   }
 
+  async findAllActiveExcluding(excludeListIds: string[]): Promise<Subscriber[]> {
+    if (excludeListIds.length === 0) return this.findAllActive();
+
+    const subscribers = await this.prisma.subscriber.findMany({
+      where: {
+        isActive: true,
+        listMemberships: {
+          none: { listId: { in: excludeListIds } },
+        },
+      },
+      orderBy: { joinedAt: 'asc' },
+    });
+    return subscribers.map(sub =>
+      Subscriber.fromPersistence(sub.id, sub.phoneNumber, sub.isActive, sub.joinedAt, sub.slackThreadTs || undefined, sub.joinedViaKeyword || undefined)
+    );
+  }
+
+  async findActiveByListIdsExcluding(includeListIds: string[], excludeListIds: string[]): Promise<Subscriber[]> {
+    if (includeListIds.length === 0) return [];
+
+    const subscribers = await this.prisma.subscriber.findMany({
+      where: {
+        isActive: true,
+        listMemberships: {
+          some: { listId: { in: includeListIds } },
+          ...(excludeListIds.length > 0
+            ? { none: { listId: { in: excludeListIds } } }
+            : {}),
+        },
+      },
+      orderBy: { joinedAt: 'asc' },
+    });
+    return subscribers.map(sub =>
+      Subscriber.fromPersistence(sub.id, sub.phoneNumber, sub.isActive, sub.joinedAt, sub.slackThreadTs || undefined, sub.joinedViaKeyword || undefined)
+    );
+  }
+
   async count(): Promise<number> {
     return this.prisma.subscriber.count({
       where: { isActive: true },

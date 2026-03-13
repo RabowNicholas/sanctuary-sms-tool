@@ -8,6 +8,9 @@ export default function AnalyticsPage() {
   const [broadcasts, setBroadcasts] = useState<BroadcastAnalytics[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [includeTests, setIncludeTests] = useState(false);
 
   useEffect(() => {
     loadAnalytics();
@@ -44,6 +47,54 @@ export default function AnalyticsPage() {
     });
   };
 
+  const getFilteredBroadcasts = () => {
+    let filtered = broadcasts;
+    if (startDate) {
+      filtered = filtered.filter(b => new Date(b.createdAt) >= new Date(startDate));
+    }
+    if (endDate) {
+      filtered = filtered.filter(b => new Date(b.createdAt) <= new Date(endDate + 'T23:59:59'));
+    }
+    if (!includeTests) {
+      filtered = filtered.filter(b => !b.name?.toLowerCase().includes('test'));
+    }
+    return filtered;
+  };
+
+  const handleExportCSV = () => {
+    const filtered = getFilteredBroadcasts();
+
+    const headers = [
+      'Name', 'Date', 'Message', 'Sent', 'Delivered', 'Failed',
+      'Delivery Rate (%)', 'Total Clicks', 'Unique Clickers',
+      'Click-Through Rate (%)', 'Total Cost ($)', 'Cost Per Click ($)'
+    ];
+
+    const rows = filtered.map(b => [
+      `"${(b.name || '').replace(/"/g, '""')}"`,
+      `"${formatDate(b.createdAt)}"`,
+      `"${b.message.replace(/"/g, '""')}"`,
+      b.sentCount,
+      b.deliveredCount,
+      b.failedCount,
+      b.deliveryRate,
+      b.totalClicks,
+      b.uniqueClickers,
+      b.clickThroughRate,
+      b.totalCost.toFixed(2),
+      b.uniqueClickers > 0 ? (b.totalCost / b.uniqueClickers).toFixed(2) : 'N/A'
+    ]);
+
+    const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `analytics-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const formatMessage = (message: string, maxLength: number = 100) => {
     if (message.length <= maxLength) return message;
     return message.substring(0, maxLength) + '...';
@@ -67,6 +118,49 @@ export default function AnalyticsPage() {
             </Link>
           </div>
         </div>
+
+        {/* Export Controls */}
+        {!isLoading && !error && broadcasts.length > 0 && (
+          <div className="mb-6 bg-gray-800 p-4 rounded-lg border border-gray-700 flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <label className="text-gray-400 text-sm">Start Date</label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={e => setStartDate(e.target.value)}
+                className="bg-gray-700 border border-gray-600 text-white text-sm rounded px-3 py-1.5 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-gray-400 text-sm">End Date</label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={e => setEndDate(e.target.value)}
+                className="bg-gray-700 border border-gray-600 text-white text-sm rounded px-3 py-1.5 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={includeTests}
+                onChange={e => setIncludeTests(e.target.checked)}
+                className="w-4 h-4 accent-blue-500"
+              />
+              <span className="text-gray-300 text-sm">Include test broadcasts</span>
+            </label>
+            <div className="flex items-center gap-3 ml-auto">
+              <span className="text-gray-400 text-sm">{getFilteredBroadcasts().length} broadcasts in range</span>
+              <button
+                onClick={handleExportCSV}
+                disabled={getFilteredBroadcasts().length === 0}
+                className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Export CSV
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Loading State */}
         {isLoading && (

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 
 interface Message {
@@ -22,6 +22,11 @@ interface ConversationData {
   messages: Message[];
 }
 
+type EngagementEvent =
+  | { type: 'click'; timestamp: string; campaignName: string | null; campaignId: string | null; url: string }
+  | { type: 'reply'; timestamp: string; content: string; campaignName: string | null; campaignId: string | null }
+  | { type: 'purchase'; timestamp: string; eventId: string; eventName: string | null };
+
 export default function ConversationPage() {
   const params = useParams();
   const router = useRouter();
@@ -34,6 +39,12 @@ export default function ConversationPage() {
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [sendSuccess, setSendSuccess] = useState(false);
+
+  // Engagement history state
+  const [engagementOpen, setEngagementOpen] = useState(false);
+  const [engagementEvents, setEngagementEvents] = useState<EngagementEvent[]>([]);
+  const [engagementLoading, setEngagementLoading] = useState(false);
+  const [engagementLoaded, setEngagementLoaded] = useState(false);
 
   const fetchConversation = async () => {
     try {
@@ -111,6 +122,36 @@ export default function ConversationPage() {
     } finally {
       setSending(false);
     }
+  };
+
+  const loadEngagement = useCallback(async () => {
+    if (engagementLoaded) return;
+    setEngagementLoading(true);
+    try {
+      const res = await fetch(`/api/subscribers/${subscriberId}/engagement`);
+      if (res.ok) {
+        const d = await res.json();
+        setEngagementEvents(d.events);
+        setEngagementLoaded(true);
+      }
+    } catch (e) {
+      console.error('Failed to load engagement:', e);
+    } finally {
+      setEngagementLoading(false);
+    }
+  }, [subscriberId, engagementLoaded]);
+
+  const toggleEngagement = () => {
+    const next = !engagementOpen;
+    setEngagementOpen(next);
+    if (next && !engagementLoaded) loadEngagement();
+  };
+
+  const formatEngagementDate = (ts: string) => {
+    return new Date(ts).toLocaleDateString('en-US', {
+      month: 'short', day: 'numeric', year: 'numeric',
+      hour: 'numeric', minute: '2-digit', hour12: true,
+    });
   };
 
   const formatPhoneNumber = (phone: string) => {
@@ -258,6 +299,51 @@ export default function ConversationPage() {
                 </div>
               </div>
             ))
+          )}
+        </div>
+
+        {/* Engagement History */}
+        <div className="mb-6 bg-gray-800 rounded-lg border border-gray-700">
+          <button
+            onClick={toggleEngagement}
+            className="w-full flex items-center justify-between px-5 py-3 text-left hover:bg-gray-750 transition-colors rounded-lg"
+          >
+            <span className="text-white font-medium text-sm">Engagement History</span>
+            <span className="text-gray-400 text-xs">{engagementOpen ? '▲' : '▼'}</span>
+          </button>
+
+          {engagementOpen && (
+            <div className="border-t border-gray-700 px-5 py-4">
+              {engagementLoading ? (
+                <p className="text-gray-400 text-sm">Loading...</p>
+              ) : engagementEvents.length === 0 ? (
+                <p className="text-gray-500 text-sm">No engagement recorded yet</p>
+              ) : (
+                <ul className="space-y-3">
+                  {engagementEvents.map((event, i) => (
+                    <li key={i} className="flex items-start justify-between gap-4 text-sm">
+                      <span className="text-gray-300 flex-1">
+                        {event.type === 'click' && (
+                          <>Clicked link{event.campaignName ? ` in ${event.campaignName}` : ''}</>
+                        )}
+                        {event.type === 'reply' && (
+                          <>
+                            Replied: &ldquo;{event.content.length > 60 ? event.content.slice(0, 60) + '…' : event.content}&rdquo;
+                            {event.campaignName && ` (to ${event.campaignName})`}
+                          </>
+                        )}
+                        {event.type === 'purchase' && (
+                          <>Purchased ticket: {event.eventName ?? event.eventId}</>
+                        )}
+                      </span>
+                      <span className="text-gray-500 text-xs whitespace-nowrap">
+                        {formatEngagementDate(event.timestamp)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           )}
         </div>
 

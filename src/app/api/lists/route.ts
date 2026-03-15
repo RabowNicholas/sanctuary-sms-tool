@@ -10,8 +10,9 @@ export async function GET() {
     const lists = await prisma.subscriberList.findMany({
       orderBy: { createdAt: 'asc' },
       include: {
-        _count: {
-          select: { subscribers: true },
+        subscribers: {
+          where: { archivedAt: null },
+          select: { id: true },
         },
         keywords: {
           select: {
@@ -22,14 +23,14 @@ export async function GET() {
       },
     });
 
-    // Transform to include memberCount at top level
+    // Transform to include memberCount at top level (active members only)
     const result = lists.map(list => ({
       id: list.id,
       name: list.name,
       description: list.description,
       createdAt: list.createdAt,
       updatedAt: list.updatedAt,
-      memberCount: list._count.subscribers,
+      memberCount: list.subscribers.length,
       keywords: list.keywords,
     }));
 
@@ -77,8 +78,9 @@ export async function POST(request: NextRequest) {
     const result = await prisma.subscriberList.findUnique({
       where: { id: createdList.id },
       include: {
-        _count: {
-          select: { subscribers: true },
+        subscribers: {
+          where: { archivedAt: null },
+          select: { id: true },
         },
         keywords: {
           select: {
@@ -95,7 +97,7 @@ export async function POST(request: NextRequest) {
       description: result!.description,
       createdAt: result!.createdAt,
       updatedAt: result!.updatedAt,
-      memberCount: result!._count.subscribers,
+      memberCount: result!.subscribers.length,
       keywords: result!.keywords,
     }, { status: 201 });
   } catch (error) {

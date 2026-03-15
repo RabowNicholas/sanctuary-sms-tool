@@ -22,6 +22,7 @@ model Subscriber {
   messages         Message[]
   linkClicks       LinkClick[]
   listMemberships  SubscriberListMembership[]
+  purchases        Purchase[]
 
   @@map("subscribers")
 }
@@ -121,11 +122,28 @@ model SubscriberListMembership {
   listId       String
   joinedAt     DateTime       @default(now())
   joinedVia    String?        // "keyword:FLOW", "manual", etc.
+  archivedAt   DateTime?      // null = active; set = soft-archived
   subscriber   Subscriber     @relation(fields: [subscriberId], references: [id], onDelete: Cascade)
   list         SubscriberList @relation(fields: [listId], references: [id], onDelete: Cascade)
 
   @@unique([subscriberId, listId])
   @@map("subscriber_list_memberships")
+}
+
+model Purchase {
+  id           String      @id @default(cuid())
+  subscriberId String?
+  subscriber   Subscriber? @relation(fields: [subscriberId], references: [id])
+  phoneNumber  String
+  eventId      String
+  eventName    String?
+  purchasedAt  DateTime    @default(now())
+  rawPayload   Json?
+
+  @@index([subscriberId])
+  @@index([eventId])
+  @@index([phoneNumber])
+  @@map("purchases")
 }
 
 model BroadcastTarget {

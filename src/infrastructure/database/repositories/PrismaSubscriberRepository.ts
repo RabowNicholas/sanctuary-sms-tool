@@ -116,6 +116,7 @@ export class PrismaSubscriberRepository implements SubscriberRepository {
             listId: {
               in: listIds,
             },
+            archivedAt: null,
           },
         },
       },
@@ -141,7 +142,7 @@ export class PrismaSubscriberRepository implements SubscriberRepository {
       where: {
         isActive: true,
         listMemberships: {
-          none: { listId: { in: excludeListIds } },
+          none: { listId: { in: excludeListIds }, archivedAt: null },
         },
       },
       orderBy: { joinedAt: 'asc' },
@@ -158,9 +159,9 @@ export class PrismaSubscriberRepository implements SubscriberRepository {
       where: {
         isActive: true,
         listMemberships: {
-          some: { listId: { in: includeListIds } },
+          some: { listId: { in: includeListIds }, archivedAt: null },
           ...(excludeListIds.length > 0
-            ? { none: { listId: { in: excludeListIds } } }
+            ? { none: { listId: { in: excludeListIds }, archivedAt: null } }
             : {}),
         },
       },

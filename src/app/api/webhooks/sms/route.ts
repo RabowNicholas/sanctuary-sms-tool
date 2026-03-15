@@ -91,11 +91,27 @@ export async function POST(request: NextRequest) {
 
     // Store the inbound message in database
     try {
+      // Best-effort campaign attribution: link reply to last outbound broadcast
+      let attributedBroadcastId: string | null = null;
+      if (!result.isOptIn) {
+        const lastOutbound = await prisma.message.findFirst({
+          where: {
+            phoneNumber: payload.From,
+            direction: 'OUTBOUND',
+            broadcastId: { not: null },
+          },
+          orderBy: { createdAt: 'desc' },
+          select: { broadcastId: true },
+        });
+        attributedBroadcastId = lastOutbound?.broadcastId ?? null;
+      }
+
       await prisma.message.create({
         data: {
           phoneNumber: payload.From,
           content: payload.Body,
           direction: 'INBOUND',
+          broadcastId: attributedBroadcastId,
         }
       });
       console.log('💾 Inbound message stored');

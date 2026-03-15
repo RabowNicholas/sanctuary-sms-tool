@@ -21,9 +21,15 @@ export async function GET(
       );
     }
 
+    const { searchParams } = new URL(request.url);
+    const includeArchived = searchParams.get('includeArchived') === 'true';
+
     // Get members with full subscriber info
     const memberships = await prisma.subscriberListMembership.findMany({
-      where: { listId: id },
+      where: {
+        listId: id,
+        ...(includeArchived ? {} : { archivedAt: null }),
+      },
       include: {
         subscriber: {
           select: {
@@ -47,12 +53,18 @@ export async function GET(
       joinedViaKeyword: m.subscriber.joinedViaKeyword,
       listJoinedAt: m.joinedAt,
       listJoinedVia: m.joinedVia,
+      archivedAt: m.archivedAt,
     }));
+
+    // Active member count (always non-archived)
+    const activeMemberCount = includeArchived
+      ? memberships.filter(m => !m.archivedAt).length
+      : members.length;
 
     return NextResponse.json({
       listId: id,
       listName: list.name,
-      memberCount: members.length,
+      memberCount: activeMemberCount,
       members,
     });
   } catch (error) {

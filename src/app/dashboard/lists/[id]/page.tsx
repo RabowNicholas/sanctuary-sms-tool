@@ -12,6 +12,7 @@ interface Member {
   joinedViaKeyword: string | null;
   listJoinedAt: string;
   listJoinedVia: string | null;
+  archivedAt: string | null;
 }
 
 interface ListDetails {
@@ -27,6 +28,13 @@ interface Subscriber {
   isActive: boolean;
 }
 
+interface ColdContact {
+  subscriberId: string;
+  phoneNumber: string;
+  joinedAt: string;
+  lastEngagedAt: string | null;
+}
+
 export default function ListDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [listDetails, setListDetails] = useState<ListDetails | null>(null);
@@ -40,6 +48,20 @@ export default function ListDetailPage({ params }: { params: Promise<{ id: strin
   const [selectedSubscriberIds, setSelectedSubscriberIds] = useState<Set<string>>(new Set());
   const [isAdding, setIsAdding] = useState(false);
 
+  // Archived contacts state
+  const [showArchived, setShowArchived] = useState(false);
+  const [archivedMembers, setArchivedMembers] = useState<Member[]>([]);
+  const [archivedCount, setArchivedCount] = useState(0);
+  const [isLoadingArchived, setIsLoadingArchived] = useState(false);
+
+  // Clean List modal state
+  const [showCleanModal, setShowCleanModal] = useState(false);
+  const [cleanSinceDate, setCleanSinceDate] = useState('');
+  const [coldContacts, setColdContacts] = useState<ColdContact[]>([]);
+  const [isPreviewing, setIsPreviewing] = useState(false);
+  const [isArchiving, setIsArchiving] = useState(false);
+  const [previewDone, setPreviewDone] = useState(false);
+
   useEffect(() => {
     loadListDetails();
     loadAllSubscribers();
@@ -51,6 +73,8 @@ export default function ListDetailPage({ params }: { params: Promise<{ id: strin
       if (response.ok) {
         const data = await response.json();
         setListDetails(data);
+        // Check how many archived members exist
+        checkArchivedCount();
       } else if (response.status === 404) {
         setError('List not found');
       } else {
@@ -60,6 +84,19 @@ export default function ListDetailPage({ params }: { params: Promise<{ id: strin
       setError('Failed to load list details');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const checkArchivedCount = async () => {
+    try {
+      const res = await fetch(`/api/lists/${id}/members?includeArchived=true`);
+      if (res.ok) {
+        const data = await res.json();
+        const archived = data.members.filter((m: Member) => m.archivedAt !== null);
+        setArchivedCount(archived.length);
+      }
+    } catch {
+      // Non-critical
     }
   };
 
@@ -144,6 +181,98 @@ export default function ListDetailPage({ params }: { params: Promise<{ id: strin
     });
   };
 
+  const handlePreviewColdContacts = async () => {
+    if (!cleanSinceDate) return;
+    setIsPreviewing(true);
+    setColdContacts([]);
+    setPreviewDone(false);
+
+    try {
+      const res = await fetch(`/api/lists/${id}/cold-contacts?since=${cleanSinceDate}`);
+      if (res.ok) {
+        const data = await res.json();
+        setColdContacts(data.contacts);
+        setPreviewDone(true);
+      } else {
+        setError('Failed to load cold contacts');
+      }
+    } catch {
+      setError('Failed to load cold contacts');
+    } finally {
+      setIsPreviewing(false);
+    }
+  };
+
+  const handleArchiveColdContacts = async () => {
+    if (coldContacts.length === 0) return;
+    setIsArchiving(true);
+
+    try {
+      const res = await fetch(`/api/lists/${id}/archive-members`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subscriberIds: coldContacts.map(c => c.subscriberId) }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setSuccess(`Archived ${data.updated} contact${data.updated !== 1 ? 's' : ''}`);
+        setShowCleanModal(false);
+        setColdContacts([]);
+        setCleanSinceDate('');
+        setPreviewDone(false);
+        loadListDetails();
+      } else {
+        setError('Failed to archive contacts');
+      }
+    } catch {
+      setError('Failed to archive contacts');
+    } finally {
+      setIsArchiving(false);
+    }
+  };
+
+  const handleShowArchived = async () => {
+    if (showArchived) {
+      setShowArchived(false);
+      return;
+    }
+    setIsLoadingArchived(true);
+    try {
+      const res = await fetch(`/api/lists/${id}/members?includeArchived=true`);
+      if (res.ok) {
+        const data = await res.json();
+        setArchivedMembers(data.members.filter((m: Member) => m.archivedAt !== null));
+        setShowArchived(true);
+      }
+    } catch {
+      setError('Failed to load archived contacts');
+    } finally {
+      setIsLoadingArchived(false);
+    }
+  };
+
+  const handleRestoreMember = async (subscriberId: string, phoneNumber: string) => {
+    try {
+      const res = await fetch(`/api/lists/${id}/archive-members/restore`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subscriberIds: [subscriberId] }),
+      });
+
+      if (res.ok) {
+        setSuccess(`Restored ${phoneNumber}`);
+        // Reload archived and active lists
+        handleShowArchived();
+        loadListDetails();
+      } else {
+        setError('Failed to restore contact');
+      }
+    } catch {
+      setError('Failed to restore contact');
+    }
+  };
+
   // Get subscribers not already in the list
   const availableSubscribers = allSubscribers.filter(
     (s) => !listDetails?.members.some((m) => m.subscriberId === s.id)
@@ -197,12 +326,25 @@ export default function ListDetailPage({ params }: { params: Promise<{ id: strin
               {listDetails.memberCount} member{listDetails.memberCount !== 1 ? 's' : ''}
             </p>
           </div>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            Add Members
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={() => {
+                setShowCleanModal(true);
+                setColdContacts([]);
+                setCleanSinceDate('');
+                setPreviewDone(false);
+              }}
+              className="bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700 transition-colors text-sm"
+            >
+              Clean List
+            </button>
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Add Members
+            </button>
+          </div>
         </div>
 
         {/* Messages */}
@@ -275,6 +417,50 @@ export default function ListDetailPage({ params }: { params: Promise<{ id: strin
           )}
         </div>
 
+        {/* Archived Contacts */}
+        {archivedCount > 0 && (
+          <div className="mt-4">
+            <button
+              onClick={handleShowArchived}
+              className="text-gray-400 hover:text-gray-300 text-sm underline"
+            >
+              {isLoadingArchived
+                ? 'Loading...'
+                : showArchived
+                ? `Hide archived contacts`
+                : `Show ${archivedCount} archived contact${archivedCount !== 1 ? 's' : ''}`}
+            </button>
+
+            {showArchived && archivedMembers.length > 0 && (
+              <div className="mt-3 bg-gray-800 rounded-lg border border-gray-700 opacity-75">
+                <div className="px-6 py-3 border-b border-gray-700">
+                  <h3 className="text-sm font-medium text-gray-400">Archived Contacts</h3>
+                </div>
+                <div className="divide-y divide-gray-700">
+                  {archivedMembers.map((member) => (
+                    <div key={member.subscriberId} className="p-4 flex items-center justify-between">
+                      <div>
+                        <span className="text-gray-400 font-medium text-sm">
+                          {member.formattedPhoneNumber}
+                        </span>
+                        <p className="text-gray-600 text-xs mt-0.5">
+                          Archived {member.archivedAt ? new Date(member.archivedAt).toLocaleDateString() : ''}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => handleRestoreMember(member.subscriberId, member.formattedPhoneNumber)}
+                        className="px-3 py-1 text-sm bg-gray-600 hover:bg-gray-500 text-white rounded transition-colors"
+                      >
+                        Restore
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Add Member Modal */}
         {showAddModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -342,6 +528,105 @@ export default function ListDetailPage({ params }: { params: Promise<{ id: strin
                     className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
                   >
                     {isAdding ? 'Adding...' : 'Add Selected'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Clean List Modal */}
+        {showCleanModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-gray-800 rounded-lg shadow-xl border border-gray-700 w-full max-w-2xl max-h-[85vh] flex flex-col">
+              <div className="px-6 py-4 border-b border-gray-700">
+                <h2 className="text-xl font-semibold text-white">Clean List</h2>
+                <p className="text-gray-400 text-sm mt-1">
+                  Find and archive contacts with no engagement since a given date
+                </p>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-6">
+                <div className="flex items-end gap-3 mb-6">
+                  <div className="flex-1">
+                    <label className="block text-gray-400 text-sm mb-1">
+                      Show contacts with no engagement since:
+                    </label>
+                    <input
+                      type="date"
+                      value={cleanSinceDate}
+                      onChange={e => {
+                        setCleanSinceDate(e.target.value);
+                        setPreviewDone(false);
+                        setColdContacts([]);
+                      }}
+                      className="w-full bg-gray-700 border border-gray-600 text-white rounded px-3 py-2 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <button
+                    onClick={handlePreviewColdContacts}
+                    disabled={!cleanSinceDate || isPreviewing}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+                  >
+                    {isPreviewing ? 'Loading...' : 'Preview'}
+                  </button>
+                </div>
+
+                {previewDone && (
+                  <div>
+                    {coldContacts.length === 0 ? (
+                      <p className="text-gray-400 text-center py-4">
+                        No cold contacts found for this date range.
+                      </p>
+                    ) : (
+                      <>
+                        <p className="text-gray-300 text-sm mb-3">
+                          {coldContacts.length} contact{coldContacts.length !== 1 ? 's' : ''} with no engagement since {cleanSinceDate}:
+                        </p>
+                        <div className="bg-gray-750 rounded border border-gray-600 divide-y divide-gray-600 max-h-64 overflow-y-auto">
+                          <div className="grid grid-cols-3 px-4 py-2 text-xs text-gray-500 font-medium sticky top-0 bg-gray-700">
+                            <span>Phone</span>
+                            <span>Joined List</span>
+                            <span>Last Engaged</span>
+                          </div>
+                          {coldContacts.map(contact => (
+                            <div key={contact.subscriberId} className="grid grid-cols-3 px-4 py-2 text-sm">
+                              <span className="text-white">{formatPhoneNumber(contact.phoneNumber)}</span>
+                              <span className="text-gray-400">{new Date(contact.joinedAt).toLocaleDateString()}</span>
+                              <span className="text-gray-500">
+                                {contact.lastEngagedAt ? new Date(contact.lastEngagedAt).toLocaleDateString() : 'Never'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="px-6 py-4 border-t border-gray-700 flex justify-between items-center">
+                <span className="text-gray-400 text-sm">
+                  {previewDone ? `${coldContacts.length} contact${coldContacts.length !== 1 ? 's' : ''} to archive` : ''}
+                </span>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => {
+                      setShowCleanModal(false);
+                      setColdContacts([]);
+                      setCleanSinceDate('');
+                      setPreviewDone(false);
+                    }}
+                    className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-500 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleArchiveColdContacts}
+                    disabled={!previewDone || coldContacts.length === 0 || isArchiving}
+                    className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {isArchiving ? 'Archiving...' : `Archive ${previewDone ? coldContacts.length : ''} contacts`}
                   </button>
                 </div>
               </div>

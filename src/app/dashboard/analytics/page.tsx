@@ -2,10 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { BroadcastAnalytics } from '@/app/api/analytics/route';
+import { BroadcastAnalytics, ListBreakdown } from '@/app/api/analytics/route';
 
 export default function AnalyticsPage() {
   const [broadcasts, setBroadcasts] = useState<BroadcastAnalytics[]>([]);
+  const [expandedBreakdowns, setExpandedBreakdowns] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [startDate, setStartDate] = useState('');
@@ -35,6 +36,18 @@ export default function AnalyticsPage() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const toggleBreakdown = (broadcastId: string) => {
+    setExpandedBreakdowns(prev => {
+      const next = new Set(prev);
+      if (next.has(broadcastId)) {
+        next.delete(broadcastId);
+      } else {
+        next.add(broadcastId);
+      }
+      return next;
+    });
   };
 
   const formatDate = (dateStr: string) => {
@@ -278,6 +291,62 @@ export default function AnalyticsPage() {
                     <p className="text-xs text-gray-500 mt-1">per unique click</p>
                   </div>
                 </div>
+
+                {/* Breakdown by List */}
+                {broadcast.listBreakdown && broadcast.listBreakdown.length > 0 && (
+                  <div className="mt-4 border-t border-gray-700 pt-4">
+                    <button
+                      onClick={() => toggleBreakdown(broadcast.id)}
+                      className="text-sm text-gray-400 hover:text-gray-300 flex items-center gap-2"
+                    >
+                      <span>{expandedBreakdowns.has(broadcast.id) ? '▲' : '▼'}</span>
+                      Breakdown by List
+                    </button>
+
+                    {expandedBreakdowns.has(broadcast.id) && (
+                      <div className="mt-3 overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="text-left text-gray-500 text-xs border-b border-gray-700">
+                              <th className="pb-2 font-medium">List</th>
+                              <th className="pb-2 font-medium text-right">Members</th>
+                              <th className="pb-2 font-medium text-right">Clicks</th>
+                              <th className="pb-2 font-medium text-right">Unique Clickers</th>
+                              <th className="pb-2 font-medium text-right">Replies</th>
+                              <th className="pb-2 font-medium text-right">Purchases</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-700">
+                            {broadcast.listBreakdown
+                              .filter((l: ListBreakdown) => l.type === 'include')
+                              .map((list: ListBreakdown) => (
+                                <tr key={list.listId} className="text-gray-300">
+                                  <td className="py-2">{list.listName}</td>
+                                  <td className="py-2 text-right">{list.memberCount}</td>
+                                  <td className="py-2 text-right text-blue-400">{list.clicks}</td>
+                                  <td className="py-2 text-right text-purple-400">{list.uniqueClickers}</td>
+                                  <td className="py-2 text-right text-green-400">{list.replies}</td>
+                                  <td className="py-2 text-right text-yellow-400">{list.purchases}</td>
+                                </tr>
+                              ))}
+                            {broadcast.listBreakdown
+                              .filter((l: ListBreakdown) => l.type === 'exclude')
+                              .map((list: ListBreakdown) => (
+                                <tr key={list.listId} className="text-gray-500 italic">
+                                  <td className="py-2">{list.listName} <span className="text-xs not-italic bg-gray-700 px-1.5 py-0.5 rounded ml-1">excluded</span></td>
+                                  <td className="py-2 text-right">{list.memberCount}</td>
+                                  <td className="py-2 text-right">—</td>
+                                  <td className="py-2 text-right">—</td>
+                                  <td className="py-2 text-right">—</td>
+                                  <td className="py-2 text-right">—</td>
+                                </tr>
+                              ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>

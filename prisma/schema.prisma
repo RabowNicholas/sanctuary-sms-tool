@@ -22,8 +22,6 @@ model Subscriber {
   messages         Message[]
   linkClicks       LinkClick[]
   listMemberships  SubscriberListMembership[]
-  purchases        Purchase[]
-
   @@map("subscribers")
 }
 
@@ -128,22 +126,6 @@ model SubscriberListMembership {
 
   @@unique([subscriberId, listId])
   @@map("subscriber_list_memberships")
-}
-
-model Purchase {
-  id           String      @id @default(cuid())
-  subscriberId String?
-  subscriber   Subscriber? @relation(fields: [subscriberId], references: [id])
-  phoneNumber  String
-  eventId      String
-  eventName    String?
-  purchasedAt  DateTime    @default(now())
-  rawPayload   Json?
-
-  @@index([subscriberId])
-  @@index([eventId])
-  @@index([phoneNumber])
-  @@map("purchases")
 }
 
 model BroadcastTarget {

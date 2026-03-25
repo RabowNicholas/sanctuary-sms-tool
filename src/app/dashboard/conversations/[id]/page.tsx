@@ -24,8 +24,7 @@ interface ConversationData {
 
 type EngagementEvent =
   | { type: 'click'; timestamp: string; campaignName: string | null; campaignId: string | null; url: string }
-  | { type: 'reply'; timestamp: string; content: string; campaignName: string | null; campaignId: string | null }
-  | { type: 'purchase'; timestamp: string; eventId: string; eventName: string | null };
+  | { type: 'reply'; timestamp: string; content: string; campaignName: string | null; campaignId: string | null };
 
 export default function ConversationPage() {
   const params = useParams();
@@ -331,9 +330,6 @@ export default function ConversationPage() {
                             Replied: &ldquo;{event.content.length > 60 ? event.content.slice(0, 60) + '…' : event.content}&rdquo;
                             {event.campaignName && ` (to ${event.campaignName})`}
                           </>
-                        )}
-                        {event.type === 'purchase' && (
-                          <>Purchased ticket: {event.eventName ?? event.eventId}</>
                         )}
                       </span>
                       <span className="text-gray-500 text-xs whitespace-nowrap">

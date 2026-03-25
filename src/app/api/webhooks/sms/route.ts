@@ -120,6 +120,24 @@ export async function POST(request: NextRequest) {
       // Continue processing even if message storage fails
     }
 
+    // Add to Hot Subscribers list on reply
+    const isRegularMessage = !result.shouldRespond && result.notifySlack;
+    if (isRegularMessage) {
+      try {
+        const subscriber = await subscriberRepo.findByPhoneNumber(payload.From);
+        if (subscriber) {
+          const hotList = await listRepo.findOrCreateByName(
+            'Hot Subscribers',
+            'Auto-created: subscribers who clicked a link or replied to a broadcast'
+          );
+          await listRepo.addMember(hotList.id, subscriber.id, 'engagement:reply');
+          console.log(`🔥 Added subscriber ${subscriber.id} to Hot Subscribers (reply)`);
+        }
+      } catch (error) {
+        console.error('Failed to add to hot list on reply:', error);
+      }
+    }
+
     // Send SMS response if needed
     if (result.shouldRespond && result.response) {
       try {
@@ -188,7 +206,6 @@ export async function POST(request: NextRequest) {
 
     // Send SMS notification to admin for regular messages (not keywords)
     // Only send if it's a regular message from an active subscriber
-    const isRegularMessage = !result.shouldRespond && result.notifySlack;
     const adminPhoneNumber = process.env.ADMIN_PHONE_NUMBER;
     const enableSmsNotifications = process.env.ENABLE_SMS_NOTIFICATIONS !== 'false';
 

@@ -40,17 +40,10 @@ export async function GET(
       orderBy: { createdAt: 'desc' },
     });
 
-    // Fetch purchases
-    const purchases = await prisma.purchase.findMany({
-      where: { subscriberId: id },
-      orderBy: { purchasedAt: 'desc' },
-    });
-
     // Merge and sort by timestamp descending
     type EngagementEvent =
       | { type: 'click'; timestamp: string; campaignName: string | null; campaignId: string | null; url: string }
-      | { type: 'reply'; timestamp: string; content: string; campaignName: string | null; campaignId: string | null }
-      | { type: 'purchase'; timestamp: string; eventId: string; eventName: string | null };
+      | { type: 'reply'; timestamp: string; content: string; campaignName: string | null; campaignId: string | null };
 
     const events: EngagementEvent[] = [
       ...clicks.map((c) => ({
@@ -66,12 +59,6 @@ export async function GET(
         content: m.content,
         campaignName: m.broadcast?.name ?? null,
         campaignId: m.broadcast?.id ?? null,
-      })),
-      ...purchases.map((p) => ({
-        type: 'purchase' as const,
-        timestamp: p.purchasedAt.toISOString(),
-        eventId: p.eventId,
-        eventName: p.eventName,
       })),
     ];
 

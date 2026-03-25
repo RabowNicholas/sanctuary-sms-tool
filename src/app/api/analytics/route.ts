@@ -11,7 +11,6 @@ export interface ListBreakdown {
   clicks: number;
   uniqueClickers: number;
   replies: number;
-  purchases: number;
 }
 
 export interface BroadcastAnalytics {
@@ -122,12 +121,11 @@ export async function GET(request: NextRequest) {
                     clicks: 0,
                     uniqueClickers: 0,
                     replies: 0,
-                    purchases: 0,
                   };
                 }
 
                 // For include lists: compute engagement metrics
-                const [listClicks, listReplies, listPurchases] = await Promise.all([
+                const [listClicks, listReplies] = await Promise.all([
                   prisma.linkClick.findMany({
                     where: {
                       subscriberId: { in: memberIds },
@@ -147,10 +145,6 @@ export async function GET(request: NextRequest) {
                     },
                     select: { id: true },
                   }),
-                  prisma.purchase.findMany({
-                    where: { subscriberId: { in: memberIds } },
-                    select: { id: true },
-                  }),
                 ]);
 
                 const listUniqueClickers = new Set(
@@ -165,7 +159,6 @@ export async function GET(request: NextRequest) {
                   clicks: listClicks.length,
                   uniqueClickers: listUniqueClickers,
                   replies: listReplies.length,
-                  purchases: listPurchases.length,
                 };
               })
             );

@@ -313,7 +313,6 @@ export default function AnalyticsPage() {
                               <th className="pb-2 font-medium text-right">Clicks</th>
                               <th className="pb-2 font-medium text-right">Unique Clickers</th>
                               <th className="pb-2 font-medium text-right">Replies</th>
-                              <th className="pb-2 font-medium text-right">Purchases</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-700">
@@ -326,7 +325,6 @@ export default function AnalyticsPage() {
                                   <td className="py-2 text-right text-blue-400">{list.clicks}</td>
                                   <td className="py-2 text-right text-purple-400">{list.uniqueClickers}</td>
                                   <td className="py-2 text-right text-green-400">{list.replies}</td>
-                                  <td className="py-2 text-right text-yellow-400">{list.purchases}</td>
                                 </tr>
                               ))}
                             {broadcast.listBreakdown
@@ -335,7 +333,6 @@ export default function AnalyticsPage() {
                                 <tr key={list.listId} className="text-gray-500 italic">
                                   <td className="py-2">{list.listName} <span className="text-xs not-italic bg-gray-700 px-1.5 py-0.5 rounded ml-1">excluded</span></td>
                                   <td className="py-2 text-right">{list.memberCount}</td>
-                                  <td className="py-2 text-right">—</td>
                                   <td className="py-2 text-right">—</td>
                                   <td className="py-2 text-right">—</td>
                                   <td className="py-2 text-right">—</td>

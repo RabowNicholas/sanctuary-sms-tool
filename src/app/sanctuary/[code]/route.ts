@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@/generated/prisma';
 import { LinkShortener } from '@/infrastructure/utils/LinkShortener';
+import { PrismaSubscriberListRepository } from '@/infrastructure/database/repositories/PrismaSubscriberListRepository';
+
+const HOT_LIST_NAME = 'Hot Subscribers';
+const HOT_LIST_DESCRIPTION = 'Auto-created: subscribers who clicked a link or replied to a broadcast';
 
 interface RouteParams {
   params: Promise<{
@@ -94,6 +98,18 @@ export async function GET(
     } catch (error) {
       console.error(`❌ Failed to record click:`, error);
       // Continue with redirect even if click recording fails
+    }
+
+    // Add to Hot Subscribers list on click
+    if (subscriberId) {
+      try {
+        const listRepo = new PrismaSubscriberListRepository(prisma);
+        const hotList = await listRepo.findOrCreateByName(HOT_LIST_NAME, HOT_LIST_DESCRIPTION);
+        await listRepo.addMember(hotList.id, subscriberId, 'engagement:click');
+        console.log(`🔥 Added subscriber ${subscriberId} to Hot Subscribers (click)`);
+      } catch (error) {
+        console.error('Failed to add to hot list on click:', error);
+      }
     }
 
     await prisma.$disconnect();

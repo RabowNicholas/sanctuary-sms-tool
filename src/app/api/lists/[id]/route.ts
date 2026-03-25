@@ -14,7 +14,7 @@ export async function GET(
       where: { id },
       include: {
         _count: {
-          select: { subscribers: true },
+          select: { subscribers: { where: { archivedAt: null } } },
         },
         keywords: {
           select: {
@@ -107,7 +107,7 @@ export async function PATCH(
       where: { id },
       include: {
         _count: {
-          select: { subscribers: true },
+          select: { subscribers: { where: { archivedAt: null } } },
         },
         keywords: {
           select: {

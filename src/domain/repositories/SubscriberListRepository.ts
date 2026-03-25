@@ -16,6 +16,7 @@ export interface SubscriberListRepository {
   delete(id: string): Promise<void>;
 
   // Membership operations
+  findOrCreateByName(name: string, description?: string): Promise<{ id: string }>;
   addMember(listId: string, subscriberId: string, joinedVia?: string): Promise<void>;
   removeMember(listId: string, subscriberId: string): Promise<void>;
   getMembers(listId: string): Promise<ListMembershipInfo[]>;

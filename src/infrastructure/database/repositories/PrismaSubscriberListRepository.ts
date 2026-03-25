@@ -14,7 +14,7 @@ export class PrismaSubscriberListRepository implements SubscriberListRepository 
       },
       include: {
         _count: {
-          select: { subscribers: true },
+          select: { subscribers: { where: { archivedAt: null } } },
         },
       },
     });
@@ -33,7 +33,7 @@ export class PrismaSubscriberListRepository implements SubscriberListRepository 
       where: { id },
       include: {
         _count: {
-          select: { subscribers: true },
+          select: { subscribers: { where: { archivedAt: null } } },
         },
       },
     });
@@ -56,7 +56,7 @@ export class PrismaSubscriberListRepository implements SubscriberListRepository 
       where: { name },
       include: {
         _count: {
-          select: { subscribers: true },
+          select: { subscribers: { where: { archivedAt: null } } },
         },
       },
     });
@@ -79,7 +79,7 @@ export class PrismaSubscriberListRepository implements SubscriberListRepository 
       orderBy: { createdAt: 'asc' },
       include: {
         _count: {
-          select: { subscribers: true },
+          select: { subscribers: { where: { archivedAt: null } } },
         },
       },
     });
@@ -104,7 +104,7 @@ export class PrismaSubscriberListRepository implements SubscriberListRepository 
       },
       include: {
         _count: {
-          select: { subscribers: true },
+          select: { subscribers: { where: { archivedAt: null } } },
         },
       },
     });
@@ -124,6 +124,15 @@ export class PrismaSubscriberListRepository implements SubscriberListRepository 
     });
   }
 
+  async findOrCreateByName(name: string, description?: string): Promise<{ id: string }> {
+    return this.prisma.subscriberList.upsert({
+      where: { name },
+      create: { name, description: description ?? null },
+      update: {},
+      select: { id: true },
+    });
+  }
+
   async addMember(listId: string, subscriberId: string, joinedVia?: string): Promise<void> {
     await this.prisma.subscriberListMembership.upsert({
       where: {
@@ -137,7 +146,7 @@ export class PrismaSubscriberListRepository implements SubscriberListRepository 
         listId,
         joinedVia: joinedVia || null,
       },
-      update: {}, // No-op if already exists
+      update: { archivedAt: null }, // Unarchive if previously archived
     });
   }
 
@@ -156,7 +165,7 @@ export class PrismaSubscriberListRepository implements SubscriberListRepository 
 
   async getMembers(listId: string): Promise<ListMembershipInfo[]> {
     const memberships = await this.prisma.subscriberListMembership.findMany({
-      where: { listId },
+      where: { listId, archivedAt: null },
       include: {
         subscriber: {
           select: {
@@ -189,7 +198,7 @@ export class PrismaSubscriberListRepository implements SubscriberListRepository 
         list: {
           include: {
             _count: {
-              select: { subscribers: true },
+              select: { subscribers: { where: { archivedAt: null } } },
             },
           },
         },

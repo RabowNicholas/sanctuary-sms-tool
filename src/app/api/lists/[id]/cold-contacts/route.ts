@@ -44,7 +44,7 @@ export async function GET(
     const phoneNumbers = memberships.map(m => m.subscriber.phoneNumber);
 
     // Find subscribers with any engagement since the date
-    const [activeClickers, activeRepliers, activePurchasers] = await Promise.all([
+    const [activeClickers, activeRepliers] = await Promise.all([
       prisma.linkClick.findMany({
         where: { subscriberId: { in: subscriberIds }, clickedAt: { gte: sinceDate } },
         select: { subscriberId: true },
@@ -57,15 +57,10 @@ export async function GET(
         },
         select: { phoneNumber: true },
       }),
-      prisma.purchase.findMany({
-        where: { subscriberId: { in: subscriberIds }, purchasedAt: { gte: sinceDate } },
-        select: { subscriberId: true },
-      }),
     ]);
 
     const engagedSubscriberIds = new Set([
       ...activeClickers.map(c => c.subscriberId).filter(Boolean) as string[],
-      ...activePurchasers.map(p => p.subscriberId).filter(Boolean) as string[],
     ]);
     const engagedPhones = new Set(activeRepliers.map(m => m.phoneNumber));
 
@@ -78,7 +73,7 @@ export async function GET(
     // For each cold subscriber, find their most recent engagement ever
     const contactsWithLastEngagement = await Promise.all(
       coldMemberships.map(async m => {
-        const [lastClick, lastReply, lastPurchase] = await Promise.all([
+        const [lastClick, lastReply] = await Promise.all([
           prisma.linkClick.findFirst({
             where: { subscriberId: m.subscriber.id },
             orderBy: { clickedAt: 'desc' },
@@ -89,17 +84,11 @@ export async function GET(
             orderBy: { createdAt: 'desc' },
             select: { createdAt: true },
           }),
-          prisma.purchase.findFirst({
-            where: { subscriberId: m.subscriber.id },
-            orderBy: { purchasedAt: 'desc' },
-            select: { purchasedAt: true },
-          }),
         ]);
 
         const timestamps = [
           lastClick?.clickedAt,
           lastReply?.createdAt,
-          lastPurchase?.purchasedAt,
         ].filter(Boolean) as Date[];
 
         const lastEngagedAt = timestamps.length > 0

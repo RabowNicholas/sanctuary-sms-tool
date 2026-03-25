@@ -153,7 +153,15 @@ export async function POST(request: NextRequest) {
 
     for (const subscriber of activeSubscribers) {
       try {
-        const result = await twilioService.sendMessage(subscriber.phoneNumber, processedMessage);
+        // Append ?sid= to tracking links so clicks can be attributed to this subscriber
+        const personalizedMessage = links.length > 0
+          ? links.reduce((msg, link) => {
+              const personalizedUrl = `${link.trackingUrl}?sid=${subscriber.id}`;
+              return msg.replace(link.trackingUrl, personalizedUrl);
+            }, processedMessage)
+          : processedMessage;
+
+        const result = await twilioService.sendMessage(subscriber.phoneNumber, personalizedMessage);
         results.push({
           phoneNumber: subscriber.phoneNumber,
           messageId: result.messageId,
@@ -165,7 +173,7 @@ export async function POST(request: NextRequest) {
           await prisma.message.create({
             data: {
               phoneNumber: subscriber.phoneNumber,
-              content: processedMessage,
+              content: personalizedMessage,
               direction: 'OUTBOUND',
               broadcastId: broadcastId,
               twilioSid: result.messageId,

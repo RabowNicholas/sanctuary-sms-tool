@@ -259,11 +259,51 @@ export default function ConversationPage() {
                 <span>Joined {new Date(subscriber.joinedAt).toLocaleDateString()}</span>
               </div>
             </div>
-            <div className="text-right text-sm text-gray-400">
-              <div>{messageCount} messages</div>
-              <div>{inboundCount} received / {outboundCount} sent</div>
+            <div className="flex items-start gap-4">
+              <div className="text-right text-sm text-gray-400">
+                <div>{messageCount} messages</div>
+                <div>{inboundCount} received / {outboundCount} sent</div>
+              </div>
+              <button
+                onClick={toggleEngagement}
+                className="text-sm px-3 py-1.5 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors whitespace-nowrap"
+              >
+                Engagement {engagementOpen ? '▲' : '▼'}
+              </button>
             </div>
           </div>
+
+          {/* Engagement History Panel */}
+          {engagementOpen && (
+            <div className="mt-3 border-t border-gray-700 pt-3">
+              {engagementLoading ? (
+                <p className="text-gray-400 text-sm">Loading...</p>
+              ) : engagementEvents.length === 0 ? (
+                <p className="text-gray-500 text-sm">No engagement recorded yet</p>
+              ) : (
+                <ul className="space-y-2 max-h-40 overflow-y-auto">
+                  {engagementEvents.map((event, i) => (
+                    <li key={i} className="flex items-start justify-between gap-4 text-sm">
+                      <span className="text-gray-300 flex-1">
+                        {event.type === 'click' && (
+                          <>Clicked link{event.campaignName ? ` in ${event.campaignName}` : ''}</>
+                        )}
+                        {event.type === 'reply' && (
+                          <>
+                            Replied: &ldquo;{event.content.length > 60 ? event.content.slice(0, 60) + '…' : event.content}&rdquo;
+                            {event.campaignName && ` (to ${event.campaignName})`}
+                          </>
+                        )}
+                      </span>
+                      <span className="text-gray-500 text-xs whitespace-nowrap">
+                        {formatEngagementDate(event.timestamp)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -298,48 +338,6 @@ export default function ConversationPage() {
                 </div>
               </div>
             ))
-          )}
-        </div>
-
-        {/* Engagement History */}
-        <div className="mb-6 bg-gray-800 rounded-lg border border-gray-700">
-          <button
-            onClick={toggleEngagement}
-            className="w-full flex items-center justify-between px-5 py-3 text-left hover:bg-gray-750 transition-colors rounded-lg"
-          >
-            <span className="text-white font-medium text-sm">Engagement History</span>
-            <span className="text-gray-400 text-xs">{engagementOpen ? '▲' : '▼'}</span>
-          </button>
-
-          {engagementOpen && (
-            <div className="border-t border-gray-700 px-5 py-4">
-              {engagementLoading ? (
-                <p className="text-gray-400 text-sm">Loading...</p>
-              ) : engagementEvents.length === 0 ? (
-                <p className="text-gray-500 text-sm">No engagement recorded yet</p>
-              ) : (
-                <ul className="space-y-3">
-                  {engagementEvents.map((event, i) => (
-                    <li key={i} className="flex items-start justify-between gap-4 text-sm">
-                      <span className="text-gray-300 flex-1">
-                        {event.type === 'click' && (
-                          <>Clicked link{event.campaignName ? ` in ${event.campaignName}` : ''}</>
-                        )}
-                        {event.type === 'reply' && (
-                          <>
-                            Replied: &ldquo;{event.content.length > 60 ? event.content.slice(0, 60) + '…' : event.content}&rdquo;
-                            {event.campaignName && ` (to ${event.campaignName})`}
-                          </>
-                        )}
-                      </span>
-                      <span className="text-gray-500 text-xs whitespace-nowrap">
-                        {formatEngagementDate(event.timestamp)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
           )}
         </div>
 

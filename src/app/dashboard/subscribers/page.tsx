@@ -220,7 +220,7 @@ export default function SubscribersPage() {
         }
         setSuccess(message);
         setImportText('');
-        setImportListId('');
+        setImportListIds([]);
         setShowImportModal(false);
         loadSubscribers();
       } else {
@@ -634,7 +634,7 @@ export default function SubscribersPage() {
                       setShowImportModal(false);
                       setImportText('');
                       setImportMethod('text');
-                      setImportListId('');
+                      setImportListIds([]);
                     }}
                     className="flex-1 bg-gray-600 text-gray-200 py-2 px-4 rounded-lg hover:bg-gray-500 transition-colors duration-200"
                   >

@@ -420,41 +420,64 @@ export default function Dashboard() {
                   className="w-full h-32 p-3 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   maxLength={1600}
                 />
-                <div className="flex justify-between text-sm text-gray-400 mt-1">
-                  <span>{broadcastMessage.length}/1600 characters</span>
-                  <span>{costBreakdown.segmentCount} SMS segment(s)</span>
+                <div className="mt-2 space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-400">
+                      Typed: <span className="text-white">{broadcastMessage.length}</span> / 1600 chars
+                    </span>
+                    {detectedLinks.some(l => approvedLinks.has(l)) && (
+                      <span className="text-blue-400 text-xs">
+                        Sent length: ~{getProcessedMessageForCost().length} chars (after link shortening)
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-400">
+                      Segments: <span className="text-white font-medium">{costBreakdown.segmentCount}</span>
+                      <span className="text-gray-500 text-xs ml-1">(160 chars each · based on sent length)</span>
+                    </span>
+                  </div>
                 </div>
               </div>
 
               {/* Detected Links */}
               {detectedLinks.length > 0 && (
                 <div className="bg-gray-700 p-4 rounded-md border border-gray-600">
-                  <h3 className="font-medium text-gray-200 mb-3 flex items-center gap-2">
-                    🔗 Detected Links ({detectedLinks.length})
+                  <h3 className="font-medium text-gray-200 mb-1 flex items-center gap-2">
+                    🔗 Links detected in your message
                   </h3>
-                  <div className="space-y-2">
+                  <p className="text-xs text-gray-400 mb-3">
+                    Check a link to shorten it and track who clicks it. Unchecked links are sent as-is.
+                  </p>
+                  <div className="space-y-3">
                     {detectedLinks.map((link, index) => (
                       <div
                         key={index}
-                        className="flex items-start gap-3 p-2 bg-gray-800 rounded border border-gray-600"
+                        className={`p-3 rounded border ${approvedLinks.has(link) ? 'bg-gray-800 border-blue-700' : 'bg-gray-800 border-gray-600'}`}
                       >
-                        <input
-                          type="checkbox"
-                          checked={approvedLinks.has(link)}
-                          onChange={() => toggleLinkApproval(link)}
-                          className="mt-1 h-4 w-4 rounded border-gray-500 text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-800"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm text-white break-all">{link}</p>
-                          {approvedLinks.has(link) ? (
-                            <div className="mt-1 space-y-1">
-                              <p className="text-xs text-green-400">✓ Will be shortened & tracked</p>
-                              <p className="text-xs text-gray-400">
-                                Preview: <span className="text-blue-300">{getBaseUrl()}/sanctuary/xxxxxxxx</span>
-                              </p>
+                        <label className="flex items-center gap-3 cursor-pointer mb-2">
+                          <input
+                            type="checkbox"
+                            checked={approvedLinks.has(link)}
+                            onChange={() => toggleLinkApproval(link)}
+                            className="h-4 w-4 rounded border-gray-500 text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-800"
+                          />
+                          <span className="text-sm font-medium text-white">
+                            {approvedLinks.has(link) ? 'Shorten & track clicks' : 'Send as original URL'}
+                          </span>
+                        </label>
+                        <div className="ml-7 space-y-1">
+                          <div className="flex items-start gap-2">
+                            <span className="text-xs text-gray-500 w-14 shrink-0 pt-0.5">Original:</span>
+                            <span className="text-xs text-gray-300 break-all">{link}</span>
+                          </div>
+                          {approvedLinks.has(link) && (
+                            <div className="flex items-start gap-2">
+                              <span className="text-xs text-gray-500 w-14 shrink-0 pt-0.5">Sent as:</span>
+                              <span className="text-xs text-blue-300 break-all">
+                                {getBaseUrl()}/sanctuary/xxxxxxxx?sid=&lt;subscriber-id&gt;
+                              </span>
                             </div>
-                          ) : (
-                            <p className="text-xs mt-1 text-orange-400">⚠️ Will send as-is (no tracking)</p>
                           )}
                         </div>
                       </div>

@@ -7,7 +7,8 @@ export async function POST(request: NextRequest) {
   const prisma = new PrismaClient();
 
   try {
-    const { phoneNumbers, listId } = await request.json();
+    const { phoneNumbers, listIds } = await request.json();
+    const listIdsArray: string[] = Array.isArray(listIds) ? listIds : [];
 
     if (!Array.isArray(phoneNumbers)) {
       return NextResponse.json(
@@ -30,18 +31,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate list if provided
-    let listName: string | undefined;
-    if (listId) {
+    // Validate lists if provided
+    if (listIdsArray.length > 0) {
       const listRepo = new PrismaSubscriberListRepository(prisma);
-      const list = await listRepo.findById(listId);
-      if (!list) {
-        return NextResponse.json(
-          { error: 'List not found' },
-          { status: 404 }
-        );
+      for (const listId of listIdsArray) {
+        const list = await listRepo.findById(listId);
+        if (!list) {
+          return NextResponse.json(
+            { error: `List not found: ${listId}` },
+            { status: 404 }
+          );
+        }
       }
-      listName = list.name;
     }
 
     const results = {
@@ -91,11 +92,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Add all successful subscribers to the list
-    if (listId && successfulSubscriberIds.length > 0) {
+    // Add all successful subscribers to each selected list
+    if (listIdsArray.length > 0 && successfulSubscriberIds.length > 0) {
       const listRepo = new PrismaSubscriberListRepository(prisma);
-      for (const subscriberId of successfulSubscriberIds) {
-        await listRepo.addMember(listId, subscriberId, 'bulk-import');
+      for (const listId of listIdsArray) {
+        for (const subscriberId of successfulSubscriberIds) {
+          await listRepo.addMember(listId, subscriberId, 'bulk-import');
+        }
       }
     }
 
@@ -103,7 +106,7 @@ export async function POST(request: NextRequest) {
       success: true,
       ...results,
       total: phoneNumbers.length,
-      ...(listId && { addedToList: true, listName }),
+      ...(listIdsArray.length > 0 && { addedToLists: listIdsArray.length }),
     });
   } catch (error) {
     console.error('Bulk import error:', error);

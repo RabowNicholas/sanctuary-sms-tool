@@ -34,7 +34,7 @@ export default function SubscribersPage() {
   const [importText, setImportText] = useState('');
   const [importMethod, setImportMethod] = useState<'text' | 'csv'>('text');
   const [availableLists, setAvailableLists] = useState<SubscriberList[]>([]);
-  const [importListId, setImportListId] = useState('');
+  const [importListIds, setImportListIds] = useState<string[]>([]);
 
   useEffect(() => {
     loadSubscribers();
@@ -203,8 +203,8 @@ export default function SubscribersPage() {
     }
 
     try {
-      const body: { phoneNumbers: string[]; listId?: string } = { phoneNumbers };
-      if (importListId) body.listId = importListId;
+      const body: { phoneNumbers: string[]; listIds?: string[] } = { phoneNumbers };
+      if (importListIds.length > 0) body.listIds = importListIds;
 
       const response = await fetch('/api/subscribers/bulk', {
         method: 'POST',
@@ -594,20 +594,31 @@ export default function SubscribersPage() {
                 {/* List Selection */}
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Add to List (optional)
+                    Add to Lists (optional)
                   </label>
-                  <select
-                    value={importListId}
-                    onChange={(e) => setImportListId(e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="">-- None --</option>
-                    {availableLists.map((list) => (
-                      <option key={list.id} value={list.id}>
-                        {list.name}
-                      </option>
-                    ))}
-                  </select>
+                  {availableLists.length === 0 ? (
+                    <p className="text-gray-500 text-sm">No lists available</p>
+                  ) : (
+                    <div className="space-y-2 max-h-40 overflow-y-auto">
+                      {availableLists.map((list) => (
+                        <label key={list.id} className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={importListIds.includes(list.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setImportListIds(prev => [...prev, list.id]);
+                              } else {
+                                setImportListIds(prev => prev.filter(id => id !== list.id));
+                              }
+                            }}
+                            className="rounded border-gray-600 text-blue-500 focus:ring-blue-500"
+                          />
+                          <span className="text-gray-300 text-sm">{list.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex gap-3">

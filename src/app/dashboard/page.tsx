@@ -302,13 +302,14 @@ export default function Dashboard() {
 
     let processedMessage = broadcastMessage;
     const baseUrl = getBaseUrl();
-    // Sample short code is 8 characters (matches actual implementation)
+    // Sample short code is 8 chars + ?sid= + 25-char CUID (matches actual sent URL)
     const sampleShortCode = 'xxxxxxxx';
+    const sampleSid = 'x'.repeat(25);
 
     detectedLinks.forEach(link => {
       // Only replace if link is approved
       if (approvedLinks.has(link)) {
-        const shortenedUrl = `${baseUrl}/sanctuary/${sampleShortCode}`;
+        const shortenedUrl = `${baseUrl}/sanctuary/${sampleShortCode}?sid=${sampleSid}`;
         processedMessage = processedMessage.replace(link, shortenedUrl);
       }
     });

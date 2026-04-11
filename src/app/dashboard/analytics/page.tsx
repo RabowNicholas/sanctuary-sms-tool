@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { BroadcastAnalytics, ListBreakdown } from '@/app/api/analytics/route';
+import { BroadcastAnalytics, ListBreakdown, ErrorBreakdown } from '@/app/api/analytics/route';
 
 export default function AnalyticsPage() {
   const [broadcasts, setBroadcasts] = useState<BroadcastAnalytics[]>([]);
@@ -204,6 +204,11 @@ export default function AnalyticsPage() {
           </div>
         )}
 
+        {/* Delivery Rate Trend Chart */}
+        {!isLoading && !error && getFilteredBroadcasts().length > 0 && (
+          <DeliveryTrendChart broadcasts={getFilteredBroadcasts()} />
+        )}
+
         {/* Broadcasts List */}
         {!isLoading && !error && broadcasts.length > 0 && (
           <div className="space-y-6">
@@ -292,6 +297,50 @@ export default function AnalyticsPage() {
                   </div>
                 </div>
 
+                {/* Error Code Breakdown */}
+                {broadcast.failedCount > 0 && broadcast.errorBreakdown && (
+                  <div className="mt-4 border-t border-gray-700 pt-4">
+                    <p className="text-sm font-medium text-red-400 mb-2">Failure Breakdown by Error Code</p>
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                      {broadcast.errorBreakdown.carrierBlock > 0 && (
+                        <div className="bg-red-950 border border-red-800 rounded p-2 text-center">
+                          <p className="text-xs text-red-400 font-mono">30007</p>
+                          <p className="text-lg font-bold text-red-300">{broadcast.errorBreakdown.carrierBlock}</p>
+                          <p className="text-xs text-red-500">Carrier Block</p>
+                        </div>
+                      )}
+                      {broadcast.errorBreakdown.optedOut > 0 && (
+                        <div className="bg-orange-950 border border-orange-800 rounded p-2 text-center">
+                          <p className="text-xs text-orange-400 font-mono">21610</p>
+                          <p className="text-lg font-bold text-orange-300">{broadcast.errorBreakdown.optedOut}</p>
+                          <p className="text-xs text-orange-500">Opted Out</p>
+                        </div>
+                      )}
+                      {broadcast.errorBreakdown.unreachable > 0 && (
+                        <div className="bg-yellow-950 border border-yellow-800 rounded p-2 text-center">
+                          <p className="text-xs text-yellow-400 font-mono">30003</p>
+                          <p className="text-lg font-bold text-yellow-300">{broadcast.errorBreakdown.unreachable}</p>
+                          <p className="text-xs text-yellow-500">Unreachable</p>
+                        </div>
+                      )}
+                      {broadcast.errorBreakdown.nonexistent > 0 && (
+                        <div className="bg-gray-750 border border-gray-600 rounded p-2 text-center">
+                          <p className="text-xs text-gray-400 font-mono">30005</p>
+                          <p className="text-lg font-bold text-gray-300">{broadcast.errorBreakdown.nonexistent}</p>
+                          <p className="text-xs text-gray-500">Nonexistent</p>
+                        </div>
+                      )}
+                      {broadcast.errorBreakdown.other > 0 && (
+                        <div className="bg-gray-750 border border-gray-600 rounded p-2 text-center">
+                          <p className="text-xs text-gray-400 font-mono">other</p>
+                          <p className="text-lg font-bold text-gray-300">{broadcast.errorBreakdown.other}</p>
+                          <p className="text-xs text-gray-500">Other</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* Breakdown by List */}
                 {broadcast.listBreakdown && broadcast.listBreakdown.length > 0 && (
                   <div className="mt-4 border-t border-gray-700 pt-4">
@@ -349,6 +398,159 @@ export default function AnalyticsPage() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Delivery Rate Trend Chart ────────────────────────────────────────────────
+
+interface TrendPoint {
+  date: string;
+  rate: number;
+  name: string | null;
+}
+
+function DeliveryTrendChart({ broadcasts }: { broadcasts: BroadcastAnalytics[] }) {
+  const [tooltip, setTooltip] = useState<{ x: number; y: number; point: TrendPoint } | null>(null);
+
+  // Sort oldest → newest for left-to-right trend
+  const points: TrendPoint[] = [...broadcasts]
+    .reverse()
+    .map(b => ({ date: b.createdAt, rate: b.deliveryRate, name: b.name }));
+
+  if (points.length === 0) return null;
+
+  const W = 800;
+  const H = 160;
+  const PAD = { top: 20, right: 20, bottom: 30, left: 40 };
+  const chartW = W - PAD.left - PAD.right;
+  const chartH = H - PAD.top - PAD.bottom;
+
+  const xScale = (i: number) =>
+    PAD.left + (points.length === 1 ? chartW / 2 : (i / (points.length - 1)) * chartW);
+  const yScale = (rate: number) =>
+    PAD.top + chartH - (rate / 100) * chartH;
+
+  const pointColor = (rate: number) =>
+    rate >= 90 ? '#4ade80' : rate >= 75 ? '#facc15' : '#f87171';
+
+  const polylinePoints = points
+    .map((p, i) => `${xScale(i)},${yScale(p.rate)}`)
+    .join(' ');
+
+  const formatShortDate = (dateStr: string) =>
+    new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+  // Show at most 8 x-axis labels to avoid crowding
+  const labelEvery = Math.ceil(points.length / 8);
+
+  return (
+    <div className="bg-gray-800 p-6 rounded-lg border border-gray-700 mb-6">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-semibold text-white">Delivery Rate Trend</h2>
+        <div className="flex items-center gap-4 text-xs text-gray-400">
+          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-green-400 inline-block" /> ≥90%</span>
+          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-yellow-400 inline-block" /> 75–89%</span>
+          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-red-400 inline-block" /> &lt;75%</span>
+        </div>
+      </div>
+
+      {points.length === 1 ? (
+        <div className="text-center py-4">
+          <p className="text-2xl font-bold" style={{ color: pointColor(points[0].rate) }}>{points[0].rate}%</p>
+          <p className="text-gray-400 text-sm mt-1">{points[0].name || formatShortDate(points[0].date)}</p>
+          <p className="text-gray-500 text-xs mt-2">Add more broadcasts to see trend over time</p>
+        </div>
+      ) : (
+        <div className="relative overflow-x-auto">
+          <svg
+            viewBox={`0 0 ${W} ${H}`}
+            className="w-full"
+            style={{ minWidth: Math.max(points.length * 30, 300) }}
+            onMouseLeave={() => setTooltip(null)}
+          >
+            {/* Guide lines at 100%, 75%, 50% */}
+            {[100, 75, 50].map(pct => {
+              const y = yScale(pct);
+              return (
+                <g key={pct}>
+                  <line x1={PAD.left} y1={y} x2={W - PAD.right} y2={y} stroke="#374151" strokeDasharray="4 3" strokeWidth="1" />
+                  <text x={PAD.left - 4} y={y + 4} textAnchor="end" fill="#6b7280" fontSize="10">{pct}%</text>
+                </g>
+              );
+            })}
+
+            {/* Trend polyline — gray base */}
+            <polyline
+              points={polylinePoints}
+              fill="none"
+              stroke="#4b5563"
+              strokeWidth="2"
+            />
+
+            {/* Colored segments between consecutive points */}
+            {points.slice(0, -1).map((p, i) => (
+              <line
+                key={i}
+                x1={xScale(i)} y1={yScale(p.rate)}
+                x2={xScale(i + 1)} y2={yScale(points[i + 1].rate)}
+                stroke={pointColor((p.rate + points[i + 1].rate) / 2)}
+                strokeWidth="2.5"
+              />
+            ))}
+
+            {/* Data points */}
+            {points.map((p, i) => (
+              <circle
+                key={i}
+                cx={xScale(i)}
+                cy={yScale(p.rate)}
+                r="5"
+                fill={pointColor(p.rate)}
+                stroke="#1f2937"
+                strokeWidth="2"
+                className="cursor-pointer"
+                onMouseEnter={() => setTooltip({ x: xScale(i), y: yScale(p.rate), point: p })}
+              />
+            ))}
+
+            {/* X-axis labels */}
+            {points.map((p, i) =>
+              i % labelEvery === 0 || i === points.length - 1 ? (
+                <text
+                  key={i}
+                  x={xScale(i)}
+                  y={H - 4}
+                  textAnchor="middle"
+                  fill="#6b7280"
+                  fontSize="9"
+                >
+                  {formatShortDate(p.date)}
+                </text>
+              ) : null
+            )}
+          </svg>
+
+          {/* Tooltip */}
+          {tooltip && (
+            <div
+              className="absolute pointer-events-none bg-gray-900 border border-gray-600 rounded px-3 py-2 text-xs shadow-lg"
+              style={{
+                left: `${(tooltip.x / W) * 100}%`,
+                top: `${(tooltip.y / H) * 100}%`,
+                transform: 'translate(-50%, -110%)',
+                zIndex: 10,
+              }}
+            >
+              <p className="text-gray-300 font-medium">{tooltip.point.name || formatShortDate(tooltip.point.date)}</p>
+              <p className="text-gray-400">{formatShortDate(tooltip.point.date)}</p>
+              <p className="font-bold mt-0.5" style={{ color: pointColor(tooltip.point.rate) }}>
+                {tooltip.point.rate}% delivered
+              </p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

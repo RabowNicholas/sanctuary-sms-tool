@@ -30,6 +30,7 @@ export default function SubscribersPage() {
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [newPhoneNumber, setNewPhoneNumber] = useState('');
+  const [addLookupWarning, setAddLookupWarning] = useState('');
   const [showImportModal, setShowImportModal] = useState(false);
   const [importText, setImportText] = useState('');
   const [importMethod, setImportMethod] = useState<'text' | 'csv'>('text');
@@ -102,14 +103,22 @@ export default function SubscribersPage() {
         body: JSON.stringify({ phoneNumber: newPhoneNumber }),
       });
 
+      const data = await response.json();
+
       if (response.ok) {
-        setSuccess('Subscriber added successfully');
-        setNewPhoneNumber('');
-        setShowAddModal(false);
+        if (data.lookupWarning) {
+          // Show warning but keep modal open so user can see it before proceeding
+          setAddLookupWarning(data.lookupWarning);
+          setSuccess('Subscriber added successfully');
+        } else {
+          setSuccess('Subscriber added successfully');
+          setNewPhoneNumber('');
+          setAddLookupWarning('');
+          setShowAddModal(false);
+        }
         loadSubscribers();
       } else {
-        const errorData = await response.json();
-        setError(errorData.error || 'Failed to add subscriber');
+        setError(data.error || 'Failed to add subscriber');
       }
     } catch (err) {
       setError('Failed to add subscriber');
@@ -464,11 +473,17 @@ export default function SubscribersPage() {
                     type="text"
                     placeholder="+15551234567"
                     value={newPhoneNumber}
-                    onChange={(e) => setNewPhoneNumber(e.target.value)}
+                    onChange={(e) => { setNewPhoneNumber(e.target.value); setAddLookupWarning(''); }}
                     className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                   <p className="text-sm text-gray-400 mt-1">Format: +1XXXXXXXXXX (US numbers only)</p>
                 </div>
+                {addLookupWarning && (
+                  <div className="bg-yellow-900/30 border border-yellow-600 text-yellow-300 px-3 py-2 rounded text-sm">
+                    ⚠️ {addLookupWarning}
+                    <p className="text-yellow-500 text-xs mt-1">Subscriber was added — you may want to verify before sending.</p>
+                  </div>
+                )}
                 <div className="flex gap-3">
                   <button
                     onClick={handleAddSubscriber}
@@ -480,10 +495,11 @@ export default function SubscribersPage() {
                     onClick={() => {
                       setShowAddModal(false);
                       setNewPhoneNumber('');
+                      setAddLookupWarning('');
                     }}
                     className="flex-1 bg-gray-600 text-gray-200 py-2 px-4 rounded-lg hover:bg-gray-500 transition-colors duration-200"
                   >
-                    Cancel
+                    {addLookupWarning ? 'Close' : 'Cancel'}
                   </button>
                 </div>
               </div>

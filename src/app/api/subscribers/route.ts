@@ -77,6 +77,44 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Run Twilio Lookup to check line type (non-blocking, advisory only)
+    let lookupWarning: string | null = null;
+    let lineType: string | null = null;
+    let carrierName: string | null = null;
+
+    const accountSid = process.env.TWILIO_ACCOUNT_SID;
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+    const isRealCredentials = accountSid && !accountSid.startsWith('ACtest') && authToken && authToken !== 'test_token';
+
+    if (isRealCredentials) {
+      try {
+        const twilio = require('twilio')(accountSid, authToken);
+
+        const lookupPromise = twilio.lookups.v2
+          .phoneNumbers(phoneNumber)
+          .fetch({ fields: 'line_type_intelligence' });
+
+        // Hard 5-second timeout — Lookup is advisory and must never block creation
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Twilio Lookup timeout (5s)')), 5000)
+        );
+
+        const lookup = await Promise.race([lookupPromise, timeoutPromise]);
+
+        const lti = lookup.lineTypeIntelligence;
+        if (lti) {
+          lineType = lti.type || null;
+          carrierName = lti.carrier_name || lti.carrierName || null;
+          if (lineType && ['landline', 'voip', 'non-fixed-voip'].includes(lineType)) {
+            lookupWarning = `Number appears to be a ${lineType}${carrierName ? ` (${carrierName})` : ''}. SMS delivery may fail.`;
+          }
+        }
+      } catch (err: any) {
+        // Lookup is non-blocking — log but don't fail the subscriber creation
+        console.warn(`Twilio Lookup failed for ${phoneNumber} (non-blocking):`, err.message);
+      }
+    }
+
     // Create new subscriber using domain entity
     const newSubscriber = Subscriber.create(phoneNumber);
 
@@ -86,10 +124,15 @@ export async function POST(request: NextRequest) {
         phoneNumber: newSubscriber.phoneNumber,
         isActive: newSubscriber.isActive,
         joinedAt: newSubscriber.joinedAt,
+        lineType,
+        carrierName,
       },
     });
 
-    return NextResponse.json(createdSubscriber, { status: 201 });
+    return NextResponse.json(
+      { ...createdSubscriber, lookupWarning },
+      { status: 201 }
+    );
   } catch (error) {
     console.error('Create subscriber error:', error);
     return NextResponse.json(

@@ -19,6 +19,8 @@ model Subscriber {
   slackThreadTs    String?     // Slack thread timestamp for grouping
   lastReadAt       DateTime?   // When admin last read this conversation
   joinedViaKeyword String?     // Keyword used to subscribe (e.g., "TRIBE", "FLOW")
+  lineType         String?     // "mobile", "landline", "voip" from Twilio Lookup
+  carrierName      String?     // Carrier name from Twilio Lookup
   messages         Message[]
   linkClicks       LinkClick[]
   listMemberships  SubscriberListMembership[]
@@ -36,6 +38,7 @@ model Message {
   broadcast      Broadcast?      @relation(fields: [broadcastId], references: [id])
   twilioSid      String?         @unique // Twilio message SID for tracking
   deliveryStatus DeliveryStatus? @default(SENT)
+  errorCode      String?         // Twilio error code (30007, 21610, 30003, 30005, etc.)
 
   @@map("messages")
 }
@@ -150,4 +153,19 @@ enum DeliveryStatus {
   DELIVERED
   FAILED
   UNDELIVERED
+}
+
+enum SuppressionReason {
+  OPTED_OUT
+  UNREACHABLE
+  NONEXISTENT
+}
+
+model SuppressionEntry {
+  id          String            @id @default(cuid())
+  phoneNumber String            @unique
+  reason      SuppressionReason
+  addedAt     DateTime          @default(now())
+
+  @@map("suppression_list")
 }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { validateTwilioWebhook } from '@/lib/twilioWebhookValidator';
 import { PrismaClient } from '@/generated/prisma';
 import { PrismaSubscriberRepository } from '@/infrastructure/database/repositories/PrismaSubscriberRepository';
 import { PrismaSignupKeywordRepository } from '@/infrastructure/database/repositories/PrismaSignupKeywordRepository';
@@ -24,6 +25,13 @@ export async function POST(request: NextRequest) {
   try {
     // Parse form data from Twilio webhook
     const formData = await request.formData();
+
+    // Validate Twilio signature before processing
+    const isValid = await validateTwilioWebhook(request, formData, '/api/webhooks/sms');
+    if (!isValid) {
+      return NextResponse.json({ error: 'Invalid signature' }, { status: 403 });
+    }
+
     const payload: TwilioWebhookPayload = {
       MessageSid: formData.get('MessageSid') as string,
       From: formData.get('From') as string,

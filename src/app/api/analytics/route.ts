@@ -13,6 +13,14 @@ export interface ListBreakdown {
   replies: number;
 }
 
+export interface ErrorBreakdown {
+  carrierBlock: number;   // 30007
+  unreachable: number;    // 30003
+  nonexistent: number;    // 30005
+  optedOut: number;       // 21610
+  other: number;
+}
+
 export interface BroadcastAnalytics {
   id: string;
   name: string | null;
@@ -28,6 +36,7 @@ export interface BroadcastAnalytics {
   createdAt: string;
   targetAll: boolean;
   listBreakdown: ListBreakdown[];
+  errorBreakdown: ErrorBreakdown;
 }
 
 export async function GET(request: NextRequest) {
@@ -49,6 +58,7 @@ export async function GET(request: NextRequest) {
             select: {
               deliveryStatus: true,
               phoneNumber: true,
+              errorCode: true,
             },
           },
           links: {
@@ -84,9 +94,19 @@ export async function GET(request: NextRequest) {
           const deliveredCount = broadcast.messages.filter(
             (m) => m.deliveryStatus === 'DELIVERED'
           ).length;
-          const failedCount = broadcast.messages.filter(
+          const failedMessages = broadcast.messages.filter(
             (m) => m.deliveryStatus === 'FAILED' || m.deliveryStatus === 'UNDELIVERED'
-          ).length;
+          );
+          const failedCount = failedMessages.length;
+
+          // Count failures by error code
+          const errorBreakdown: ErrorBreakdown = {
+            carrierBlock: failedMessages.filter(m => m.errorCode === '30007').length,
+            unreachable: failedMessages.filter(m => m.errorCode === '30003').length,
+            nonexistent: failedMessages.filter(m => m.errorCode === '30005').length,
+            optedOut: failedMessages.filter(m => m.errorCode === '21610').length,
+            other: failedMessages.filter(m => m.errorCode && !['30007', '30003', '30005', '21610'].includes(m.errorCode)).length,
+          };
 
           const deliveryRate =
             broadcast.sentCount > 0
@@ -179,6 +199,7 @@ export async function GET(request: NextRequest) {
             createdAt: broadcast.createdAt.toISOString(),
             targetAll: broadcast.targetAll,
             listBreakdown,
+            errorBreakdown,
           };
         })
       );

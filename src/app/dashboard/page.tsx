@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { CostCalculator } from '@/infrastructure/cost/CostCalculator';
+import { lintMessage, LintWarning } from '@/lib/contentLinter';
 
 interface Subscriber {
   id: string;
@@ -51,13 +52,23 @@ export default function Dashboard() {
   const [excludeListIds, setExcludeListIds] = useState<Set<string>>(new Set());
   const [targetedRecipientCount, setTargetedRecipientCount] = useState(0);
 
+  // Content linter state
+  const [lintWarnings, setLintWarnings] = useState<LintWarning[]>([]);
+
+  // Preflight suppression state
+  const [preflightData, setPreflightData] = useState<{
+    suppressedCount: number;
+    suppressedByReason: { optedOut: number; unreachable: number; nonexistent: number };
+  } | null>(null);
+  const preflightDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const costCalculator = new CostCalculator();
 
   useEffect(() => {
     loadDashboardData();
   }, []);
 
-  // Detect links in broadcast message
+  // Detect links in broadcast message and run content linter
   useEffect(() => {
     const urlPattern = /(https?:\/\/[^\s]+)/g;
     const matches = broadcastMessage.match(urlPattern);
@@ -71,7 +82,39 @@ export default function Dashboard() {
       links.forEach(link => newApproved.add(link));
       return newApproved;
     });
+
+    // Run content linter
+    setLintWarnings(lintMessage(broadcastMessage));
   }, [broadcastMessage]);
+
+  // Debounced preflight check when targeting changes
+  useEffect(() => {
+    if (preflightDebounceRef.current) {
+      clearTimeout(preflightDebounceRef.current);
+    }
+    preflightDebounceRef.current = setTimeout(async () => {
+      try {
+        const response = await fetch('/api/broadcast/preflight', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            targetAll,
+            targetListIds: targetAll ? [] : Array.from(selectedListIds),
+            excludeListIds: Array.from(excludeListIds),
+          }),
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setPreflightData(data.suppressedCount > 0 ? data : null);
+        }
+      } catch {
+        // Non-critical — don't show error for preflight failures
+      }
+    }, 500);
+    return () => {
+      if (preflightDebounceRef.current) clearTimeout(preflightDebounceRef.current);
+    };
+  }, [targetAll, selectedListIds, excludeListIds]);
 
   const loadDashboardData = async () => {
     try {
@@ -351,6 +394,12 @@ export default function Dashboard() {
                 Analytics
               </Link>
               <Link
+                href="/dashboard/suppression"
+                className="bg-red-700 text-white px-4 py-2 rounded-lg hover:bg-red-800 transition-colors duration-200"
+              >
+                Suppression
+              </Link>
+              <Link
                 href="/dashboard/subscribers"
                 className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200"
               >
@@ -439,6 +488,20 @@ export default function Dashboard() {
                   </div>
                 </div>
               </div>
+
+              {/* Content linter warning */}
+              {lintWarnings.length > 0 && (
+                <div className="bg-yellow-900/30 border border-yellow-600 text-yellow-300 px-4 py-3 rounded-md">
+                  <p className="font-medium text-sm mb-1">
+                    ⚠️ This message contains content that may be filtered by carriers (~22% block rate historically). Review before sending.
+                  </p>
+                  <ul className="text-xs space-y-0.5 mt-2 list-disc list-inside text-yellow-400">
+                    {lintWarnings.map((w, i) => (
+                      <li key={i}>{w.message}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               {/* Detected Links */}
               {detectedLinks.length > 0 && (
@@ -666,6 +729,21 @@ export default function Dashboard() {
                   </div>
                 )}
               </div>
+
+              {/* Preflight suppression summary */}
+              {preflightData && preflightData.suppressedCount > 0 && (
+                <div className="bg-blue-900/20 border border-blue-700 text-blue-300 px-4 py-3 rounded-md text-sm">
+                  <p className="font-medium">
+                    ℹ️ {preflightData.suppressedCount} number{preflightData.suppressedCount !== 1 ? 's' : ''} will be skipped (
+                    {[
+                      preflightData.suppressedByReason.optedOut > 0 && `${preflightData.suppressedByReason.optedOut} opted out`,
+                      preflightData.suppressedByReason.unreachable > 0 && `${preflightData.suppressedByReason.unreachable} unreachable`,
+                      preflightData.suppressedByReason.nonexistent > 0 && `${preflightData.suppressedByReason.nonexistent} nonexistent`,
+                    ].filter(Boolean).join(', ')}
+                    )
+                  </p>
+                </div>
+              )}
 
               {/* Send Button */}
               <button

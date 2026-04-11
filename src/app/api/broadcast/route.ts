@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@/generated/prisma';
 import { PrismaSubscriberRepository } from '@/infrastructure/database/repositories/PrismaSubscriberRepository';
+import { PrismaSuppressionRepository } from '@/infrastructure/database/repositories/PrismaSuppressionRepository';
 import { TwilioSMSService } from '@/infrastructure/sms/TwilioSMSService';
 import { CostCalculator } from '@/infrastructure/cost/CostCalculator';
 import { LinkShortener } from '@/infrastructure/utils/LinkShortener';
@@ -64,9 +65,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Calculate cost
+    // Filter out suppressed numbers before sending
+    const suppressionRepo = new PrismaSuppressionRepository(prisma);
+    const suppressionEntries = await suppressionRepo.findAll();
+    const suppressedNumbers = new Set(suppressionEntries.map(e => e.phoneNumber));
+
+    const suppressedSubscribers = activeSubscribers.filter(s => suppressedNumbers.has(s.phoneNumber));
+    const recipientsToSend = activeSubscribers.filter(s => !suppressedNumbers.has(s.phoneNumber));
+
+    if (suppressedSubscribers.length > 0) {
+      console.log(`🚫 Skipping ${suppressedSubscribers.length} suppressed number(s) before broadcast`);
+    }
+
+    // Calculate cost based on recipients actually being sent to (excludes suppressed)
     const costCalculator = new CostCalculator();
-    const totalCost = costCalculator.calculateBroadcastCost(body.message, activeSubscribers.length);
+    const totalCost = costCalculator.calculateBroadcastCost(body.message, recipientsToSend.length);
 
     // Create broadcast record (non-blocking - analytics only)
     let broadcast: any = null;
@@ -78,7 +91,7 @@ export async function POST(request: NextRequest) {
         data: {
           name: body.campaignName || null,
           message: body.message,
-          sentCount: activeSubscribers.length,
+          sentCount: recipientsToSend.length,
           totalCost,
           targetAll: effectiveTargetAll,
         },
@@ -101,6 +114,27 @@ export async function POST(request: NextRequest) {
     } catch (error) {
       console.error('⚠️ Failed to create broadcast record (continuing without tracking):', error);
       // Continue without broadcast tracking - messages will still be sent
+    }
+
+    // Write audit records for suppressed numbers (non-blocking)
+    // Uses errorCode='SUPPRESSED' so these are queryable and distinguishable from
+    // actual delivery failures. Stored as FAILED to keep the enum valid.
+    if (broadcastId && suppressedSubscribers.length > 0) {
+      try {
+        await prisma.message.createMany({
+          data: suppressedSubscribers.map(sub => ({
+            phoneNumber: sub.phoneNumber,
+            content: body.message,
+            direction: 'OUTBOUND' as const,
+            broadcastId,
+            deliveryStatus: 'FAILED' as const,
+            errorCode: 'SUPPRESSED',
+          })),
+          skipDuplicates: true,
+        });
+      } catch (err) {
+        console.error('⚠️ Failed to write suppressed audit records (non-blocking):', err);
+      }
     }
 
     // Process links in message (non-blocking - analytics only)
@@ -149,9 +183,9 @@ export async function POST(request: NextRequest) {
     const results = [];
     const errors = [];
 
-    console.log(`📤 Starting broadcast to ${activeSubscribers.length} subscribers...`);
+    console.log(`📤 Starting broadcast to ${recipientsToSend.length} subscribers (${suppressedSubscribers.length} suppressed, skipped)...`);
 
-    for (const subscriber of activeSubscribers) {
+    for (const subscriber of recipientsToSend) {
       try {
         // Append ?sid= to tracking links so clicks can be attributed to this subscriber
         const personalizedMessage = links.length > 0
@@ -223,6 +257,7 @@ export async function POST(request: NextRequest) {
       campaignName: broadcast?.name || null,
       sentTo: results.length,
       failed: errors.length,
+      suppressedCount: suppressedSubscribers.length,
       totalCost: totalCost.toFixed(2),
       segmentCount: costCalculator.calculateSegments(body.message),
       linksTracked: links.length,

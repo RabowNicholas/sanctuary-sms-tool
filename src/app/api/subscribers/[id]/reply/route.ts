@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@/generated/prisma';
 import { TwilioSMSService } from '@/infrastructure/sms/TwilioSMSService';
 import { CostCalculator } from '@/infrastructure/cost/CostCalculator';
+import { PrismaSuppressionRepository } from '@/infrastructure/database/repositories/PrismaSuppressionRepository';
 
 interface RouteParams {
   params: Promise<{
@@ -53,6 +54,16 @@ export async function POST(
     if (!subscriber.isActive) {
       return NextResponse.json(
         { error: 'Cannot send message to inactive subscriber' },
+        { status: 400 }
+      );
+    }
+
+    // Check suppression list before sending
+    const suppressionRepo = new PrismaSuppressionRepository(prisma);
+    const isSuppressed = await suppressionRepo.isSuppressed(subscriber.phoneNumber);
+    if (isSuppressed) {
+      return NextResponse.json(
+        { error: 'Cannot send message to suppressed number (opted out or unreachable)' },
         { status: 400 }
       );
     }

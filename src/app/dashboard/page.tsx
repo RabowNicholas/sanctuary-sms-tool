@@ -352,7 +352,7 @@ export default function Dashboard() {
     detectedLinks.forEach(link => {
       // Only replace if link is approved
       if (approvedLinks.has(link)) {
-        const shortenedUrl = `${baseUrl}/sanctuary/${sampleShortCode}?sid=${sampleSid}`;
+        const shortenedUrl = `${baseUrl}/rd/${sampleShortCode}?sid=${sampleSid}`;
         processedMessage = processedMessage.replace(link, shortenedUrl);
       }
     });
@@ -538,7 +538,7 @@ export default function Dashboard() {
                             <div className="flex items-start gap-2">
                               <span className="text-xs text-gray-500 w-14 shrink-0 pt-0.5">Sent as:</span>
                               <span className="text-xs text-blue-300 break-all">
-                                {getBaseUrl()}/sanctuary/xxxxxxxx?sid=&lt;subscriber-id&gt;
+                                {getBaseUrl()}/rd/xxxxxxxx?sid=&lt;subscriber-id&gt;
                               </span>
                             </div>
                           )}

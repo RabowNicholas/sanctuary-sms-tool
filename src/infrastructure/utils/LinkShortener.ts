@@ -37,7 +37,7 @@ export class LinkShortener {
       }
 
       const shortCode = this.generateShortCode();
-      const trackingUrl = `${this.baseUrl}/sanctuary/${shortCode}`;
+      const trackingUrl = `${this.baseUrl}/rd/${shortCode}`;
 
       // Store link in database
       await this.prisma.link.create({

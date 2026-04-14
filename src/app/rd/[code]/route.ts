@@ -91,13 +91,24 @@ export async function GET(
     // Try to identify the subscriber from query params or cookies
     const subscriberId = request.nextUrl.searchParams.get('sid') || undefined;
 
+    // Filter out carrier link scanners, iMessage/WhatsApp/Slack previewers,
+    // and generic HTTP clients. These pre-fetch SMS URLs server-side and
+    // would otherwise count as the subscriber clicking.
+    const userAgent = request.headers.get('user-agent') || '';
+    const isBot = !userAgent || /bot|crawler|spider|preview|scanner|fetch|monitor|facebookexternalhit|slackbot|discordbot|twitterbot|linkedin|whatsapp|telegram|applebot|google|bing|yahoo|duckduck|curl|wget|okhttp|python-requests|go-http|node-fetch|axios|java\/|libwww|headless|phantomjs|lighthouse|proofpoint|mimecast|symantec|barracuda|cloudmark/i.test(userAgent);
+
+    if (isBot) {
+      console.log(`🤖 Skipping click record (bot UA: ${userAgent.slice(0, 80)})`);
+      await prisma.$disconnect();
+      return NextResponse.redirect(originalUrl, 302);
+    }
+
     // Record the click
     try {
       await linkShortener.recordClick(shortCode, subscriberId);
       console.log(`✅ Click recorded for ${shortCode}${subscriberId ? ` (subscriber: ${subscriberId})` : ''}`);
     } catch (error) {
       console.error(`❌ Failed to record click:`, error);
-      // Continue with redirect even if click recording fails
     }
 
     // Add to Hot Subscribers list on click
@@ -114,8 +125,7 @@ export async function GET(
 
     await prisma.$disconnect();
 
-    // Redirect to original URL with 308 (permanent redirect for tracking)
-    return NextResponse.redirect(originalUrl, 308);
+    return NextResponse.redirect(originalUrl, 302);
 
   } catch (error: any) {
     console.error('Click tracking error:', error);

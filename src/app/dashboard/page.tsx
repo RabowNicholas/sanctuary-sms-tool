@@ -10,6 +10,8 @@ interface Subscriber {
   phoneNumber: string;
   isActive: boolean;
   joinedAt: string;
+  joinedViaKeyword?: string;
+  lists?: { id: string; name: string }[];
 }
 
 interface DashboardStats {
@@ -61,6 +63,17 @@ export default function Dashboard() {
     suppressedByReason: { optedOut: number; unreachable: number; nonexistent: number };
   } | null>(null);
   const preflightDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Quick Reply state
+  const [qcPhone, setQcPhone] = useState('');
+  const [qcMessage, setQcMessage] = useState('');
+  const [qcResults, setQcResults] = useState<Subscriber[]>([]);
+  const [qcSelectedSub, setQcSelectedSub] = useState<Subscriber | null>(null);
+  const [qcIsSending, setQcIsSending] = useState(false);
+  const [qcError, setQcError] = useState('');
+  const [qcSuccess, setQcSuccess] = useState('');
+  const [qcShowResults, setQcShowResults] = useState(false);
+  const qcDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const costCalculator = new CostCalculator();
 
@@ -317,6 +330,78 @@ export default function Dashboard() {
     }
   };
 
+  const handleQcSearch = (value: string) => {
+    setQcPhone(value);
+    setQcSelectedSub(null);
+    setQcError('');
+    setQcSuccess('');
+
+    if (qcDebounceRef.current) clearTimeout(qcDebounceRef.current);
+
+    if (value.length < 3) {
+      setQcResults([]);
+      setQcShowResults(false);
+      return;
+    }
+
+    qcDebounceRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/subscribers?search=${encodeURIComponent(value)}`);
+        if (res.ok) {
+          const data = await res.json();
+          setQcResults(data);
+          setQcShowResults(data.length > 0);
+        }
+      } catch {
+        // Silent — autocomplete is non-critical
+      }
+    }, 300);
+  };
+
+  const handleQcSelectSubscriber = (sub: Subscriber) => {
+    setQcSelectedSub(sub);
+    setQcPhone(sub.phoneNumber);
+    setQcShowResults(false);
+  };
+
+  const handleQcSend = async () => {
+    if (!qcSelectedSub) {
+      setQcError('Select a subscriber from the dropdown');
+      return;
+    }
+    if (!qcMessage.trim()) {
+      setQcError('Enter a message');
+      return;
+    }
+
+    setQcIsSending(true);
+    setQcError('');
+    setQcSuccess('');
+
+    try {
+      const res = await fetch(`/api/subscribers/${qcSelectedSub.id}/reply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: qcMessage }),
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        setQcSuccess(`Sent to ${formatPhoneNumber(qcSelectedSub.phoneNumber)}. Cost: $${data.cost}`);
+        setQcMessage('');
+        setQcPhone('');
+        setQcSelectedSub(null);
+        loadDashboardData();
+      } else {
+        setQcError(data.error || 'Failed to send');
+      }
+    } catch {
+      setQcError('Failed to send message');
+    } finally {
+      setQcIsSending(false);
+    }
+  };
+
   const formatPhoneNumber = (phone: string) => {
     if (phone.startsWith('+1') && phone.length === 12) {
       const cleaned = phone.substring(2);
@@ -432,6 +517,109 @@ export default function Dashboard() {
           <div className="bg-gray-800 p-6 rounded-lg shadow-lg border border-gray-700">
             <h3 className="text-lg font-semibold text-gray-300">Today's Messages</h3>
             <p className="text-3xl font-bold text-cyan-400">{stats.todayMessages}</p>
+          </div>
+        </div>
+
+        {/* Quick Reply */}
+        <div className="max-w-2xl mx-auto mb-8">
+          <div className="bg-gray-800 p-6 rounded-lg shadow-lg border border-gray-700">
+            <h2 className="text-xl font-semibold text-white mb-4">Quick Reply</h2>
+
+            <div className="space-y-4">
+              {/* Phone search with autocomplete */}
+              <div className="relative">
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Subscriber Phone Number
+                </label>
+                <input
+                  type="tel"
+                  value={qcPhone}
+                  onChange={(e) => handleQcSearch(e.target.value)}
+                  placeholder="Start typing +1..."
+                  className="w-full p-3 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                {qcSelectedSub && (
+                  <p className="text-xs text-green-400 mt-1">
+                    Selected: {formatPhoneNumber(qcSelectedSub.phoneNumber)}
+                    {qcSelectedSub.joinedViaKeyword && ` (via ${qcSelectedSub.joinedViaKeyword})`}
+                  </p>
+                )}
+
+                {/* Autocomplete dropdown */}
+                {qcShowResults && (
+                  <div className="absolute z-10 w-full mt-1 bg-gray-700 border border-gray-600 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                    {qcResults.map((sub) => (
+                      <button
+                        key={sub.id}
+                        onClick={() => handleQcSelectSubscriber(sub)}
+                        className="w-full text-left px-4 py-3 hover:bg-gray-600 transition-colors border-b border-gray-600 last:border-b-0"
+                      >
+                        <span className="text-white font-medium">
+                          {formatPhoneNumber(sub.phoneNumber)}
+                        </span>
+                        {sub.joinedViaKeyword && (
+                          <span className="ml-2 text-xs text-purple-400">
+                            via {sub.joinedViaKeyword}
+                          </span>
+                        )}
+                        {sub.lists && sub.lists.length > 0 && (
+                          <span className="ml-2 text-xs text-gray-400">
+                            [{sub.lists.map(l => l.name).join(', ')}]
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Message textarea */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Message
+                </label>
+                <textarea
+                  value={qcMessage}
+                  onChange={(e) => setQcMessage(e.target.value)}
+                  placeholder="Type your reply..."
+                  className="w-full h-24 p-3 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  maxLength={1600}
+                />
+                <div className="flex justify-between text-sm mt-1">
+                  <span className="text-gray-400">
+                    {qcMessage.length} / 1600 chars
+                  </span>
+                  {qcMessage.length > 0 && (
+                    <span className="text-gray-400">
+                      Cost: <span className="text-green-400">
+                        ${costCalculator.getCostBreakdown(qcMessage, 1).totalCost.toFixed(2)}
+                      </span>
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Error/success feedback */}
+              {qcError && (
+                <div className="bg-red-900 border border-red-700 text-red-300 px-4 py-3 rounded text-sm">
+                  {qcError}
+                </div>
+              )}
+              {qcSuccess && (
+                <div className="bg-green-900 border border-green-700 text-green-300 px-4 py-3 rounded text-sm">
+                  {qcSuccess}
+                </div>
+              )}
+
+              {/* Send button */}
+              <button
+                onClick={handleQcSend}
+                disabled={qcIsSending || !qcSelectedSub || !qcMessage.trim()}
+                className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors duration-200"
+              >
+                {qcIsSending ? 'Sending...' : 'Send Reply'}
+              </button>
+            </div>
           </div>
         </div>
 

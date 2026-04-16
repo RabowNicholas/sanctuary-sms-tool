@@ -2,12 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@/generated/prisma';
 import { Subscriber } from '@/domain/entities/Subscriber';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const prisma = new PrismaClient();
+  const { searchParams } = new URL(request.url);
+  const search = searchParams.get('search');
 
   try {
     const subscribers = await prisma.subscriber.findMany({
+      where: search
+        ? { phoneNumber: { contains: search }, isActive: true }
+        : undefined,
       orderBy: { joinedAt: 'desc' },
+      take: search ? 10 : undefined,
       include: {
         _count: {
           select: { messages: true },

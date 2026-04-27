@@ -78,6 +78,30 @@ export class LinkShortener {
   }
 
   /**
+   * Create a standalone tracking link not tied to a broadcast.
+   * Retries on the rare shortCode collision.
+   */
+  async createStandaloneLink(originalUrl: string): Promise<ShortenedLink> {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const shortCode = this.generateShortCode();
+      try {
+        await this.prisma.link.create({
+          data: { broadcastId: null, originalUrl, shortCode },
+        });
+        return {
+          originalUrl,
+          shortCode,
+          trackingUrl: `${this.baseUrl}/rd/${shortCode}`,
+        };
+      } catch (error: any) {
+        if (error?.code === 'P2002') continue;
+        throw error;
+      }
+    }
+    throw new Error('Failed to generate unique short code');
+  }
+
+  /**
    * Get original URL from short code
    */
   async getOriginalUrl(shortCode: string): Promise<string | null> {

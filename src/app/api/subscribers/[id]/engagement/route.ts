@@ -49,8 +49,8 @@ export async function GET(
       ...clicks.map((c) => ({
         type: 'click' as const,
         timestamp: c.clickedAt.toISOString(),
-        campaignName: c.link.broadcast.name ?? null,
-        campaignId: c.link.broadcast.id,
+        campaignName: c.link.broadcast?.name ?? null,
+        campaignId: c.link.broadcast?.id ?? null,
         url: c.link.originalUrl,
       })),
       ...replies.map((m) => ({

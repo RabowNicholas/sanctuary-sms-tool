@@ -34,7 +34,13 @@ async function main() {
 
   console.log(`Total clicks in DB: ${clicks.length}`);
 
-  const broadcastIds = [...new Set(clicks.map((c) => c.link.broadcastId))];
+  const broadcastIds = [
+    ...new Set(
+      clicks
+        .map((c) => c.link.broadcastId)
+        .filter((id): id is string => id !== null)
+    ),
+  ];
 
   const sendTimesByBroadcastSubscriber = new Map<string, Date>();
   for (const bId of broadcastIds) {
@@ -60,7 +66,7 @@ async function main() {
   let dupeHits = 0;
 
   for (const c of clicks) {
-    if (!c.subscriberId) continue;
+    if (!c.subscriberId || !c.link.broadcastId) continue;
     const sentAt = sendTimesByBroadcastSubscriber.get(
       `${c.link.broadcastId}:${c.subscriberId}`
     );
@@ -99,6 +105,7 @@ async function main() {
   const byBroadcast = new Map<string, { before: number; afterDelete: number }>();
   for (const c of clicks) {
     const b = c.link.broadcastId;
+    if (!b) continue;
     if (!byBroadcast.has(b)) byBroadcast.set(b, { before: 0, afterDelete: 0 });
     byBroadcast.get(b)!.before++;
     if (toDelete.has(c.id)) byBroadcast.get(b)!.afterDelete++;

@@ -108,6 +108,16 @@ export default function DashboardLayout({
                 Lists
               </Link>
               <Link
+                href="/dashboard/links"
+                className={`text-sm font-medium transition-colors duration-200 ${
+                  isActive('/dashboard/links')
+                    ? 'text-white'
+                    : 'text-gray-300 hover:text-white'
+                }`}
+              >
+                Links
+              </Link>
+              <Link
                 href="/dashboard/settings"
                 className={`text-sm font-medium transition-colors duration-200 ${
                   isActive('/dashboard/settings')

@@ -5,9 +5,11 @@ import { PrismaClient } from '@/generated/prisma';
 import { LinkShortener } from '@/infrastructure/utils/LinkShortener';
 
 function getBaseUrl(): string {
-  return process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}`
-    : (process.env.NEXTAUTH_URL || 'http://localhost:3000');
+  // Prefer the canonical domain (NEXTAUTH_URL) over VERCEL_URL, which is the
+  // deployment-specific hostname and breaks on the next deploy.
+  if (process.env.NEXTAUTH_URL) return process.env.NEXTAUTH_URL;
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  return 'http://localhost:3000';
 }
 
 export async function GET() {

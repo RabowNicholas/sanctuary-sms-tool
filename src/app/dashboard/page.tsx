@@ -430,14 +430,14 @@ export default function Dashboard() {
 
     let processedMessage = broadcastMessage;
     const baseUrl = getBaseUrl();
-    // Sample short code is 8 chars + ?sid= + 25-char CUID (matches actual sent URL)
-    const sampleShortCode = 'xxxxxxxx';
-    const sampleSid = 'x'.repeat(25);
+    // Sample short code is 7 chars (matches actual sent URL: subscriber
+    // attribution now lives in the DB, not a ?sid= query param)
+    const sampleShortCode = 'x'.repeat(7);
 
     detectedLinks.forEach(link => {
       // Only replace if link is approved
       if (approvedLinks.has(link)) {
-        const shortenedUrl = `${baseUrl}/rd/${sampleShortCode}?sid=${sampleSid}`;
+        const shortenedUrl = `${baseUrl}/r/${sampleShortCode}`;
         processedMessage = processedMessage.replace(link, shortenedUrl);
       }
     });
@@ -726,7 +726,7 @@ export default function Dashboard() {
                             <div className="flex items-start gap-2">
                               <span className="text-xs text-gray-500 w-14 shrink-0 pt-0.5">Sent as:</span>
                               <span className="text-xs text-blue-300 break-all">
-                                {getBaseUrl()}/rd/xxxxxxxx?sid=&lt;subscriber-id&gt;
+                                {getBaseUrl()}/r/xxxxxxx
                               </span>
                             </div>
                           )}

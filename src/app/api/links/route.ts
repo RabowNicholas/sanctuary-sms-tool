@@ -40,7 +40,7 @@ export async function GET() {
         id: l.id,
         originalUrl: l.originalUrl,
         shortCode: l.shortCode,
-        trackingUrl: `${baseUrl}/rd/${l.shortCode}`,
+        trackingUrl: `${baseUrl}/r/${l.shortCode}`,
         createdAt: l.createdAt.toISOString(),
         clickCount: l._count.clicks,
       }))

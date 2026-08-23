@@ -6,6 +6,14 @@ export interface ShortenedLink {
   trackingUrl: string;
 }
 
+export interface ResolvedLink {
+  originalUrl: string;
+  subscriberId: string | null;
+}
+
+const SHORT_CODE_LENGTH = 7;
+const SHORT_CODE_CHARS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+
 export class LinkShortener {
   private readonly urlPattern = /(https?:\/\/[^\s]+)/g;
 
@@ -20,7 +28,7 @@ export class LinkShortener {
     broadcastId: string,
     approvedUrls?: string[]
   ): Promise<{ processedMessage: string; links: ShortenedLink[] }> {
-    const urls = this.extractUrls(message);
+    const urls = this.getApprovedUrls(message, approvedUrls);
 
     if (urls.length === 0) {
       return { processedMessage: message, links: [] };
@@ -30,14 +38,8 @@ export class LinkShortener {
     let processedMessage = message;
 
     for (const url of urls) {
-      // Skip if approvedUrls is provided and this URL is not approved
-      if (approvedUrls && !approvedUrls.includes(url)) {
-        console.log(`⏭️  Skipping unapproved link: ${url}`);
-        continue;
-      }
-
       const shortCode = this.generateShortCode();
-      const trackingUrl = `${this.baseUrl}/rd/${shortCode}`;
+      const trackingUrl = `${this.baseUrl}/r/${shortCode}`;
 
       // Store link in database
       await this.prisma.link.create({
@@ -58,6 +60,20 @@ export class LinkShortener {
   }
 
   /**
+   * Extract the distinct URLs in a message that are approved for shortening
+   * (or all detected URLs, if no approved list is given).
+   */
+  getApprovedUrls(message: string, approvedUrls?: string[]): string[] {
+    const urls = this.extractUrls(message);
+    if (!approvedUrls) return urls;
+    return urls.filter((url) => {
+      if (approvedUrls.includes(url)) return true;
+      console.log(`⏭️  Skipping unapproved link: ${url}`);
+      return false;
+    });
+  }
+
+  /**
    * Extract all URLs from a message
    */
   private extractUrls(message: string): string[] {
@@ -69,10 +85,9 @@ export class LinkShortener {
    * Generate a unique short code
    */
   private generateShortCode(): string {
-    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let code = '';
-    for (let i = 0; i < 8; i++) {
-      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    for (let i = 0; i < SHORT_CODE_LENGTH; i++) {
+      code += SHORT_CODE_CHARS.charAt(Math.floor(Math.random() * SHORT_CODE_CHARS.length));
     }
     return code;
   }
@@ -91,7 +106,7 @@ export class LinkShortener {
         return {
           originalUrl,
           shortCode,
-          trackingUrl: `${this.baseUrl}/rd/${shortCode}`,
+          trackingUrl: `${this.baseUrl}/r/${shortCode}`,
         };
       } catch (error: any) {
         if (error?.code === 'P2002') continue;
@@ -102,14 +117,97 @@ export class LinkShortener {
   }
 
   /**
-   * Get original URL from short code
+   * Create one tracking link per subscriber for the same destination URL, with the
+   * subscriber attribution stored on the row instead of appended to the URL as
+   * `?sid=`. This is what keeps personalized broadcast links short.
+   *
+   * Returns a map of subscriberId -> ShortenedLink. Either all links are created
+   * or none are (a single batched INSERT), so callers can safely fall back to an
+   * unpersonalized link on failure without risking partial/mismatched state.
    */
-  async getOriginalUrl(shortCode: string): Promise<string | null> {
-    const link = await this.prisma.link.findUnique({
-      where: { shortCode },
+  async createPersonalizedLinks(
+    originalUrl: string,
+    broadcastId: string,
+    subscriberIds: string[]
+  ): Promise<Map<string, ShortenedLink>> {
+    const uniqueSubscriberIds = [...new Set(subscriberIds)];
+    const codes = new Map<string, string>(); // subscriberId -> shortCode
+
+    const generateFor = (ids: string[]) => {
+      const used = new Set(codes.values());
+      for (const id of ids) {
+        let code: string;
+        do {
+          code = this.generateShortCode();
+        } while (used.has(code));
+        used.add(code);
+        codes.set(id, code);
+      }
+    };
+
+    generateFor(uniqueSubscriberIds);
+
+    // Guard against collisions with codes already persisted in the DB. With
+    // 7-char base62 codes this is astronomically unlikely, but a collision
+    // would silently mis-attribute a click, so it's worth checking rather
+    // than trusting probability.
+    const maxAttempts = 5;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const candidateCodes = [...codes.values()];
+      const existing = await this.prisma.link.findMany({
+        where: { shortCode: { in: candidateCodes } },
+        select: { shortCode: true },
+      });
+
+      if (existing.length === 0) break;
+
+      const existingCodes = new Set(existing.map((e) => e.shortCode));
+      const conflictingIds = [...codes.entries()]
+        .filter(([, code]) => existingCodes.has(code))
+        .map(([id]) => id);
+
+      if (attempt === maxAttempts - 1) {
+        throw new Error(
+          `Failed to generate unique short codes after ${maxAttempts} attempts (${conflictingIds.length} conflict(s) remaining)`
+        );
+      }
+
+      generateFor(conflictingIds);
+    }
+
+    await this.prisma.link.createMany({
+      data: uniqueSubscriberIds.map((subscriberId) => ({
+        broadcastId,
+        originalUrl,
+        shortCode: codes.get(subscriberId)!,
+        subscriberId,
+      })),
     });
 
-    return link?.originalUrl || null;
+    const result = new Map<string, ShortenedLink>();
+    for (const subscriberId of uniqueSubscriberIds) {
+      const shortCode = codes.get(subscriberId)!;
+      result.set(subscriberId, {
+        originalUrl,
+        shortCode,
+        trackingUrl: `${this.baseUrl}/r/${shortCode}`,
+      });
+    }
+    return result;
+  }
+
+  /**
+   * Look up a short code: the destination URL plus whichever subscriber (if
+   * any) it was personalized for.
+   */
+  async getLink(shortCode: string): Promise<ResolvedLink | null> {
+    const link = await this.prisma.link.findUnique({
+      where: { shortCode },
+      select: { originalUrl: true, subscriberId: true },
+    });
+
+    if (!link) return null;
+    return { originalUrl: link.originalUrl, subscriberId: link.subscriberId };
   }
 
   /**

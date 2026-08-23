@@ -23,6 +23,7 @@ model Subscriber {
   carrierName      String?     // Carrier name from Twilio Lookup
   messages         Message[]
   linkClicks       LinkClick[]
+  links            Link[]
   listMemberships  SubscriberListMembership[]
   @@map("subscribers")
 }
@@ -69,14 +70,17 @@ model Broadcast {
 }
 
 model Link {
-  id          String      @id @default(cuid())
-  broadcastId String?
-  broadcast   Broadcast?  @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
-  originalUrl String      // The original URL
-  shortCode   String      @unique // Unique short code (e.g., "abc123")
-  createdAt   DateTime    @default(now())
-  clicks      LinkClick[]
+  id           String      @id @default(cuid())
+  broadcastId  String?
+  broadcast    Broadcast?  @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  originalUrl  String      // The original URL
+  shortCode    String      @unique // Unique short code (e.g., "abc123")
+  subscriberId String?     // Set when this link was personalized for one recipient (replaces the old ?sid= query param)
+  subscriber   Subscriber? @relation(fields: [subscriberId], references: [id])
+  createdAt    DateTime    @default(now())
+  clicks       LinkClick[]
 
+  @@index([subscriberId])
   @@map("links")
 }
 

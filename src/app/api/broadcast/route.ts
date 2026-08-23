@@ -4,7 +4,7 @@ import { PrismaSubscriberRepository } from '@/infrastructure/database/repositori
 import { PrismaSuppressionRepository } from '@/infrastructure/database/repositories/PrismaSuppressionRepository';
 import { TwilioSMSService } from '@/infrastructure/sms/TwilioSMSService';
 import { CostCalculator } from '@/infrastructure/cost/CostCalculator';
-import { LinkShortener } from '@/infrastructure/utils/LinkShortener';
+import { LinkShortener, ShortenedLink } from '@/infrastructure/utils/LinkShortener';
 
 interface BroadcastRequest {
   message: string;
@@ -137,9 +137,12 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Process links in message (non-blocking - analytics only)
-    let processedMessage = body.message;
-    let links: any[] = [];
+    // Process links in message (non-blocking - analytics only). One short
+    // link is generated per (URL, recipient) pair, with the recipient stored
+    // on the Link row itself rather than appended as a ?sid= query param —
+    // that's what keeps the URL sent in the text short.
+    let approvedUrls: string[] = [];
+    let personalizedLinksByUrl = new Map<string, Map<string, ShortenedLink>>();
 
     if (broadcastId) {
       try {
@@ -150,21 +153,22 @@ export async function POST(request: NextRequest) {
               : process.env.NEXTAUTH_URL || 'http://localhost:3000');
 
         const linkShortener = new LinkShortener(prisma, baseUrl);
-        const result = await linkShortener.processMessage(
-          body.message,
-          broadcastId,
-          body.approvedLinks
-        );
-        processedMessage = result.processedMessage;
-        links = result.links;
+        approvedUrls = linkShortener.getApprovedUrls(body.message, body.approvedLinks);
 
-        if (links.length > 0) {
-          console.log(`🔗 Created ${links.length} tracking link(s) for broadcast`);
+        const subscriberIds = recipientsToSend.map((s) => s.id);
+        for (const url of approvedUrls) {
+          const links = await linkShortener.createPersonalizedLinks(url, broadcastId, subscriberIds);
+          personalizedLinksByUrl.set(url, links);
+        }
+
+        if (approvedUrls.length > 0) {
+          console.log(`🔗 Created ${approvedUrls.length} tracking link(s) x ${subscriberIds.length} recipient(s) for broadcast`);
         }
       } catch (error) {
         console.error('⚠️ Failed to process links (using original message):', error);
         // Continue with original message - no link tracking
-        processedMessage = body.message;
+        approvedUrls = [];
+        personalizedLinksByUrl = new Map();
       }
     } else {
       console.log('⏭️  Skipping link processing (no broadcast record)');
@@ -186,15 +190,16 @@ export async function POST(request: NextRequest) {
     console.log(`📤 Starting broadcast to ${recipientsToSend.length} subscribers (${suppressedSubscribers.length} suppressed, skipped)...`);
 
     for (const subscriber of recipientsToSend) {
-      try {
-        // Append ?sid= to tracking links so clicks can be attributed to this subscriber
-        const personalizedMessage = links.length > 0
-          ? links.reduce((msg, link) => {
-              const personalizedUrl = `${link.trackingUrl}?sid=${subscriber.id}`;
-              return msg.replace(link.trackingUrl, personalizedUrl);
-            }, processedMessage)
-          : processedMessage;
+      // Substitute each URL with the short link created for this specific
+      // subscriber above; attribution lives on that link's DB row.
+      const personalizedMessage = approvedUrls.length > 0
+        ? approvedUrls.reduce((msg, url) => {
+            const link = personalizedLinksByUrl.get(url)?.get(subscriber.id);
+            return link ? msg.replace(url, link.trackingUrl) : msg;
+          }, body.message)
+        : body.message;
 
+      try {
         const result = await twilioService.sendMessage(subscriber.phoneNumber, personalizedMessage);
         results.push({
           phoneNumber: subscriber.phoneNumber,
@@ -233,7 +238,7 @@ export async function POST(request: NextRequest) {
             await prisma.message.create({
               data: {
                 phoneNumber: subscriber.phoneNumber,
-                content: processedMessage,
+                content: personalizedMessage,
                 direction: 'OUTBOUND',
                 broadcastId: broadcastId,
                 deliveryStatus: 'FAILED',
@@ -260,7 +265,7 @@ export async function POST(request: NextRequest) {
       suppressedCount: suppressedSubscribers.length,
       totalCost: totalCost.toFixed(2),
       segmentCount: costCalculator.calculateSegments(body.message),
-      linksTracked: links.length,
+      linksTracked: approvedUrls.length,
       targetAll: effectiveTargetAll,
       targetedLists: effectiveTargetAll ? null : targetListIds.length,
       results: results.slice(0, 10), // Return first 10 for reference

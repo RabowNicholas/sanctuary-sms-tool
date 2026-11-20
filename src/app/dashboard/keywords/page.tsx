@@ -320,6 +320,30 @@ export default function KeywordsPage() {
                       <p className="text-gray-300 text-sm mb-2">
                         {keyword.autoResponse}
                       </p>
+                      {keyword.isActive && (
+                        <div className="flex items-center gap-2 mb-2 text-xs">
+                          <span className="text-gray-400">Signup page:</span>
+                          <a
+                            href={`/join/${encodeURIComponent(keyword.keyword)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-400 hover:underline font-mono"
+                          >
+                            /join/{keyword.keyword}
+                          </a>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(
+                                `${window.location.origin}/join/${encodeURIComponent(keyword.keyword)}`
+                              );
+                              setSuccess(`Copied signup link for ${keyword.keyword}`);
+                            }}
+                            className="px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded"
+                          >
+                            Copy link
+                          </button>
+                        </div>
+                      )}
                       <p className="text-gray-500 text-xs">
                         Created: {new Date(keyword.createdAt).toLocaleDateString()}
                       </p>

@@ -10,6 +10,7 @@ export interface ProcessInboundMessageResult {
   notifySlack: boolean;
   slackMessage?: string;
   isOptIn?: boolean;
+  alreadySubscribed?: boolean;
   matchedKeyword?: string;
 }
 
@@ -62,11 +63,37 @@ export class ProcessInboundMessage {
     return this.handleRegularMessage(phoneNumber, message, existingSubscriber);
   }
 
+  /**
+   * Opt a phone number in via a signup keyword without an inbound SMS.
+   * Used by the web signup page after the number has been verified.
+   * Returns null if the keyword doesn't exist or is inactive.
+   */
+  async optInViaKeyword(
+    phoneNumber: string,
+    keywordText: string,
+    source: "keyword" | "web" = "web",
+  ): Promise<ProcessInboundMessageResult | null> {
+    if (!Subscriber.isValidPhoneNumber(phoneNumber)) {
+      throw new Error("Invalid US phone number");
+    }
+    const keyword = await this.keywordRepository.findByKeyword(
+      keywordText.trim().toUpperCase(),
+    );
+    if (!keyword || !keyword.isActive) return null;
+
+    const existingSubscriber =
+      await this.subscriberRepository.findByPhoneNumber(phoneNumber);
+    return this.handleOptIn(phoneNumber, existingSubscriber, keyword, source);
+  }
+
   private async handleOptIn(
     phoneNumber: string,
     existingSubscriber: Subscriber | null,
     keyword: SignupKeyword,
+    source: "keyword" | "web" = "keyword",
   ): Promise<ProcessInboundMessageResult> {
+    const joinedVia = `${source}:${keyword.keyword}`;
+    const via = source === "web" ? `${keyword.keyword} (web)` : keyword.keyword;
     if (existingSubscriber) {
       if (existingSubscriber.isActive) {
         // Already subscribed - but might need to add to keyword's list
@@ -74,7 +101,7 @@ export class ProcessInboundMessage {
           await this.listRepository.addMember(
             keyword.listId,
             existingSubscriber.id,
-            `keyword:${keyword.keyword}`,
+            joinedVia,
           );
         }
 
@@ -83,6 +110,7 @@ export class ProcessInboundMessage {
           response: keyword.autoResponse || "You're already subscribed!",
           notifySlack: false,
           isOptIn: true,
+          alreadySubscribed: true,
           matchedKeyword: keyword.keyword,
         };
       } else {
@@ -96,7 +124,7 @@ export class ProcessInboundMessage {
           await this.listRepository.addMember(
             keyword.listId,
             existingSubscriber.id,
-            `keyword:${keyword.keyword}`,
+            joinedVia,
           );
         }
 
@@ -106,7 +134,7 @@ export class ProcessInboundMessage {
           response:
             keyword.autoResponse || "Welcome back! You're subscribed again.",
           notifySlack: true,
-          slackMessage: `🔄 Subscriber reactivated: ${formattedPhone} rejoined via ${keyword.keyword}!`,
+          slackMessage: `🔄 Subscriber reactivated: ${formattedPhone} rejoined via ${via}!`,
           isOptIn: true,
           matchedKeyword: keyword.keyword,
         };
@@ -121,7 +149,7 @@ export class ProcessInboundMessage {
         await this.listRepository.addMember(
           keyword.listId,
           newSubscriber.id,
-          `keyword:${keyword.keyword}`,
+          joinedVia,
         );
       }
 
@@ -130,7 +158,7 @@ export class ProcessInboundMessage {
         shouldRespond: true,
         response: keyword.autoResponse || this.defaultWelcomeMessage,
         notifySlack: true,
-        slackMessage: `✅ New subscriber: ${formattedPhone} joined via ${keyword.keyword}!`,
+        slackMessage: `✅ New subscriber: ${formattedPhone} joined via ${via}!`,
         isOptIn: true,
         matchedKeyword: keyword.keyword,
       };

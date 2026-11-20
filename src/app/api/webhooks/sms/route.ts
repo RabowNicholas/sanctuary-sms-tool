@@ -6,6 +6,7 @@ import { PrismaSignupKeywordRepository } from '@/infrastructure/database/reposit
 import { PrismaSubscriberListRepository } from '@/infrastructure/database/repositories/PrismaSubscriberListRepository';
 import { TwilioSMSService } from '@/infrastructure/sms/TwilioSMSService';
 import { ProcessInboundMessage } from '@/domain/usecases/ProcessInboundMessage';
+import { deliverOptInResult } from '@/lib/deliverOptInResult';
 
 // Twilio webhook payload interface
 interface TwilioWebhookPayload {
@@ -146,71 +147,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Send SMS response if needed
-    if (result.shouldRespond && result.response) {
-      try {
-        await twilioService.sendMessage(payload.From, result.response);
-
-        // Store the outbound message
-        try {
-          await prisma.message.create({
-            data: {
-              phoneNumber: payload.From,
-              content: result.response,
-              direction: 'OUTBOUND',
-            }
-          });
-          console.log('💾 Outbound message stored');
-        } catch (error) {
-          console.error('❌ Failed to store outbound message:', error);
-        }
-
-        console.log('📤 SMS response sent');
-
-        // Mark opt-in messages as read after response is sent
-        if (result.isOptIn) {
-          try {
-            const subscriber = await subscriberRepo.findByPhoneNumber(payload.From);
-            if (subscriber) {
-              await prisma.subscriber.update({
-                where: { id: subscriber.id },
-                data: { lastReadAt: new Date() }
-              });
-              console.log(`✅ Opt-in conversation marked as read (keyword: ${result.matchedKeyword || 'unknown'})`);
-            }
-          } catch (error) {
-            console.error('❌ Failed to mark opt-in conversation as read:', error);
-          }
-        }
-      } catch (error) {
-        console.error('❌ Failed to send SMS response:', error);
-        // Don't fail the webhook for SMS sending errors
-      }
-    }
-
-    // Send Slack notification if needed
-    if (result.notifySlack && result.slackMessage) {
-      try {
-        const threadTs = await slackService.postMessage(result.slackMessage);
-        console.log('💬 Slack notification sent:', threadTs);
-
-        // Update subscriber with thread timestamp for future messages
-        if (payload.From) {
-          try {
-            const subscriber = await subscriberRepo.findByPhoneNumber(payload.From);
-            if (subscriber && !subscriber.slackThreadTs) {
-              subscriber.slackThreadTs = threadTs;
-              await subscriberRepo.update(subscriber);
-            }
-          } catch (error) {
-            console.error('❌ Failed to update subscriber with thread TS:', error);
-          }
-        }
-      } catch (error) {
-        console.error('❌ Failed to send Slack notification:', error);
-        // Don't fail the webhook for Slack errors
-      }
-    }
+    // Send SMS response, store it, and notify Slack
+    await deliverOptInResult(payload.From, result, {
+      prisma,
+      subscriberRepo,
+      twilioService,
+      slackService,
+    });
 
     // Send SMS notification to admin for regular messages (not keywords)
     // Only send if it's a regular message from an active subscriber

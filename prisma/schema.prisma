@@ -173,3 +173,18 @@ model SuppressionEntry {
 
   @@map("suppression_list")
 }
+
+// One-time codes for web signup (/join/[keyword]). Code is stored hashed.
+model PhoneVerification {
+  id          String    @id @default(cuid())
+  phoneNumber String
+  keyword     String
+  codeHash    String
+  attempts    Int       @default(0)
+  expiresAt   DateTime
+  verifiedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([phoneNumber, createdAt])
+  @@map("phone_verifications")
+}
